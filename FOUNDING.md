@@ -196,6 +196,22 @@ interface Connector {
 - **Semantic lenses:** path→meaning tables — data files, cheap to add,
   golden-tested (§10).
 
+**Codecs (the parser layer, between fetch and diff).** Raw content formats
+are not diffable as strings: Confluence bodies are storage-format XHTML with
+`<ac:structured-macro>` blocks or ADF (Atlassian Document Format JSON, also
+Jira's rich-text format); specs are OpenAPI/collection JSON with positional
+paths. Each format gets a **codec**: a pure function (no network, golden-
+tested) that parses it into one canonical block tree — typed blocks
+(heading, paragraph, code, table, macro, endpoint) with stable identities —
+so the same identity-keyed tree diff serves documents, designs, and specs
+alike. Parsing happens once at ingest; reports never re-parse, and digests
+can name the changed block ("code block in section 'Deployment' changed")
+and rehydrate only that block's before/after on demand. Codec build order:
+ADF (serves Jira + Confluence), Confluence storage XHTML, OpenAPI/Postman
+collection, Playwright a11y YAML (near-free), Markdown (makes local repo
+docs diffable — dogfooding). Connectors stay transport (fetch+normalize);
+codecs own format; the diff core stays singular.
+
 **Relevance:**
 - **Watchlist seeding:** assigned-to-me, @-mentioned, I-commented,
   my-team's-board — emitted by `discover` with a source tag.
@@ -272,6 +288,8 @@ Repo shape:
 what-changed/
   packages/core/          # store, diff engine, merkle, redaction, GC,
                           # change cards, relevance
+  packages/codecs/        # adf/ confluence-storage/ openapi/ a11y-yaml/ md/
+                          # — pure format→canonical-block-tree parsers
   packages/connectors/    # jira/ github/ … each: connector.ts + lens.json
   packages/cli/           # CLI entry (skill + CI both call this)
   packages/mcp/           # MCP server over core
