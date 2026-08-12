@@ -1,0 +1,61 @@
+{
+  "observations": [
+    {
+      "connector": "jira",
+      "external_id": "PROJ-42",
+      "object_type": "issue",
+      "name": "PROJ-42 Payment service rate-limits checkout",
+      "url": "https://example.atlassian.net/browse/PROJ-42",
+      "payload": {
+        "key": "PROJ-42",
+        "summary": "Payment service rate-limits checkout",
+        "status": "In Progress",
+        "assignee": "Dana Osei",
+        "priority": "High",
+        "labels": ["payments"],
+        "comment_count": 3,
+        "last_comment_hash": "a1b2c3",
+        "links": [{ "id": "1001", "type": "blocks", "key": "PROJ-51" }]
+      }
+    },
+    {
+      "connector": "jira",
+      "external_id": "PROJ-51",
+      "object_type": "issue",
+      "name": "PROJ-51 Checkout redesign rollout",
+      "url": "https://example.atlassian.net/browse/PROJ-51",
+      "payload": {
+        "key": "PROJ-51",
+        "summary": "Checkout redesign rollout",
+        "status": "Blocked",
+        "assignee": "You",
+        "priority": "High",
+        "labels": ["checkout"],
+        "comment_count": 7,
+        "last_comment_hash": "d4e5f6",
+        "links": [{ "id": "1001", "type": "is blocked by", "key": "PROJ-42" }]
+      }
+    },
+    {
+      "connector": "github",
+      "external_id": "acme/storefront#142",
+      "object_type": "pull_request",
+      "name": "acme/storefront#142 Checkout button component swap",
+      "url": "https://github.com/acme/storefront/pull/142",
+      "payload": {
+        "number": 142,
+        "title": "Checkout button component swap",
+        "state": "open",
+        "is_pr": true,
+        "draft": true,
+        "merged": false,
+        "assignees": ["you"],
+        "labels": ["frontend"],
+        "milestone": "Q3 checkout",
+        "comments": 2,
+        "body_hash": "9f8e7d",
+        "updated_at": "2026-08-10T18:02:00Z"
+      }
+    }
+  ]
+}

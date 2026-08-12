@@ -1,0 +1,17 @@
+{
+  "name": "what-changed",
+  "version": "0.1.0",
+  "description": "A local change-memory layer for work tools — ask an agent \"what changed?\" and get a provenance-linked answer.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "what-changed": "./src/cli.js"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "demo": "node src/cli.js demo",
+    "test": "node --test test/"
+  }
+}
