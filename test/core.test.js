@@ -64,6 +64,11 @@ test('seen baseline: markSeen clears the digest; mutes filter kinds', () => {
   assert.ok(rows.some((r) => r.summary.includes('priority: High → Highest')));
   assert.ok(rows.some((r) => r.summary === 'marked ready for review'));
 
+  // ADF codec integration: description edits arrive as block-level content deltas.
+  assert.ok(rows.some((r) => r.kind === 'content' && /description: paragraph .* edited/.test(r.summary)),
+    rows.map((r) => r.summary).join(' | '));
+  assert.ok(rows.some((r) => r.kind === 'content' && /warning panel removed/.test(r.summary)));
+
   addMute(db, 'kind', 'comment');
   assert.ok(unseenDeltas(db).every((r) => r.kind !== 'comment'));
 });

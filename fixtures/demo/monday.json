@@ -15,7 +15,17 @@
         "labels": ["payments"],
         "comment_count": 3,
         "last_comment_hash": "a1b2c3",
-        "links": [{ "id": "1001", "type": "blocks", "key": "PROJ-51" }]
+        "links": [{ "id": "1001", "type": "blocks", "key": "PROJ-51" }],
+        "description_adf": {
+          "version": 1,
+          "type": "doc",
+          "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": "Rate limit hits 429 at 200 rps in staging." }] },
+            { "type": "panel", "attrs": { "panelType": "warning" }, "content": [
+              { "type": "paragraph", "content": [{ "type": "text", "text": "Vendor SLA under review — do not ship Wave 1 until resolved." }] }
+            ] }
+          ]
+        }
       }
     },
     {

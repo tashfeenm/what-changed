@@ -88,7 +88,7 @@ export function ensureObject(db, { connector, externalId, objectType, name, url 
  * applies the lens, and records deltas.
  * Returns { changed, snapshotId, deltas }.
  */
-export function ingestSnapshot(db, object, payload, { label = null, lens = null, provenanceUrl = null } = {}) {
+export function ingestSnapshot(db, object, payload, { label = null, lens = null, differs = null, provenanceUrl = null } = {}) {
   const canonical = canonicalize(payload);
   const hash = sha256(canonical);
   // Re-read the head pointer: the caller's object row may be stale.
@@ -109,13 +109,14 @@ export function ingestSnapshot(db, object, payload, { label = null, lens = null,
 
   const deltas = [];
   if (prev && prev.payload_hash !== hash) {
-    const ops = jsonDiff(JSON.parse(prev.payload), payload);
+    const ops = computeOps(JSON.parse(prev.payload), payload, differs);
     const insert = db.prepare(
       `INSERT INTO deltas (object_id, from_snapshot, to_snapshot, observed_at, kind, path, before, after, summary, provenance_url)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     );
     for (const op of ops) {
-      const semantic = lens ? lens(op, payload) : null;
+      // Ops from a custom differ arrive pre-lensed (kind + summary set).
+      const semantic = op.kind ? op : lens ? lens(op, payload) : null;
       if (semantic?.suppress) continue; // lens says: bookkeeping, not news
       const kind = semantic?.kind ?? 'field';
       const summary = semantic?.summary ?? defaultSummary(op);
@@ -135,6 +136,29 @@ export function ingestSnapshot(db, object, payload, { label = null, lens = null,
   }
 
   return { changed: true, snapshotId, deltas };
+}
+
+/**
+ * Generic structural diff, with per-field custom differs. A differ owns one
+ * top-level field: (before, after) => ops with kind + summary already set.
+ * Rich formats (ADF documents, node trees) need format-aware diffing — the
+ * generic diff would see an edited block as remove+add.
+ */
+function computeOps(prevPayload, newPayload, differs) {
+  if (!differs) return jsonDiff(prevPayload, newPayload);
+  const prevRest = { ...prevPayload };
+  const newRest = { ...newPayload };
+  const ops = [];
+  for (const [field, differ] of Object.entries(differs)) {
+    const before = prevRest[field];
+    const after = newRest[field];
+    delete prevRest[field];
+    delete newRest[field];
+    if (canonicalize(before ?? null) !== canonicalize(after ?? null)) {
+      ops.push(...differ(before, after));
+    }
+  }
+  return [...jsonDiff(prevRest, newRest), ...ops];
 }
 
 function defaultSummary(op) {

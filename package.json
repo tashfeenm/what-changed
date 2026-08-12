@@ -13,5 +13,8 @@
   "scripts": {
     "demo": "node src/cli.js demo",
     "test": "node --test test/"
+  },
+  "dependencies": {
+    "adf-codec": "file:../adf-codec"
   }
 }

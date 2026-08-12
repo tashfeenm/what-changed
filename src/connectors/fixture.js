@@ -3,7 +3,7 @@
 // captured as a fixture and replayed here.
 import { readFileSync } from 'node:fs';
 import { ensureObject, ingestSnapshot } from '../core/store.js';
-import { lenses } from '../core/lens.js';
+import { profiles } from './profiles.js';
 
 /**
  * Fixture file shape: { observations: [{ connector, external_id, object_type,
@@ -20,10 +20,8 @@ export function ingestFixtureFile(db, filePath, { label = null } = {}) {
       name: obs.name,
       url: obs.url,
     });
-    const { changed } = ingestSnapshot(db, object, obs.payload, {
-      label,
-      lens: lenses[obs.connector] ?? null,
-    });
+    const profile = profiles[obs.connector] ?? {};
+    const { changed } = ingestSnapshot(db, object, obs.payload, { label, ...profile });
     results.objects += 1;
     if (changed) results.changed += 1;
   }

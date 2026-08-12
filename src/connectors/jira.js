@@ -3,8 +3,8 @@
 // Note: Jira also exposes upstream-native changelogs (bulk endpoint) — the
 // prototype diffs snapshots for uniformity; changelog ingestion is a fast-follow.
 import { ensureObject, ingestSnapshot, getCursor, setCursor } from '../core/store.js';
-import { jiraLens } from '../core/lens.js';
 import { sha256 } from '../core/diff.js';
+import { profiles } from './profiles.js';
 
 export async function sync(db, config, env = process.env) {
   const base = env.JIRA_BASE_URL;
@@ -27,7 +27,7 @@ export async function sync(db, config, env = process.env) {
   do {
     const url = new URL(`${base}/rest/api/3/search/jql`);
     url.searchParams.set('jql', jql);
-    url.searchParams.set('fields', 'summary,status,assignee,priority,labels,comment,issuelinks,updated');
+    url.searchParams.set('fields', 'summary,status,assignee,priority,labels,comment,issuelinks,description,updated');
     url.searchParams.set('maxResults', '100');
     if (nextPageToken) url.searchParams.set('nextPageToken', nextPageToken);
 
@@ -43,7 +43,7 @@ export async function sync(db, config, env = process.env) {
         name: `${issue.key} ${issue.fields.summary}`,
         url: `${base}/browse/${issue.key}`,
       });
-      const { changed } = ingestSnapshot(db, object, normalize(issue), { lens: jiraLens });
+      const { changed } = ingestSnapshot(db, object, normalize(issue), profiles.jira);
       results.objects += 1;
       if (changed) results.changed += 1;
     }
@@ -63,6 +63,9 @@ export function normalize(issue) {
     assignee: f.assignee?.displayName ?? null,
     priority: f.priority?.name ?? null,
     labels: (f.labels ?? []).slice().sort(),
+    // Rich text kept as raw ADF; the profile's field differ (adf-codec)
+    // turns edits into block-level deltas ("code block (bash) edited").
+    description_adf: f.description ?? null,
     comment_count: f.comment?.total ?? 0,
     // Redaction: comment bodies are never stored — only a content hash of the
     // latest comment, enough to detect edits without retaining text.

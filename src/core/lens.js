@@ -52,4 +52,3 @@ export const jiraLens = makeLens([
   { pattern: /^\/last_comment_hash$/, suppress: true },
 ]);
 
-export const lenses = { github: githubLens, jira: jiraLens };

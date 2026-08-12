@@ -18,7 +18,7 @@ export function toCard(row, { whyIndex = null } = {}) {
 
 const KIND_TAGS = {
   status: 'STATUS', comment: 'COMMENT', created: 'NEW', field: 'FIELD',
-  node: 'NODE', route: 'ROUTE', endpoint: 'ENDPOINT', removed: 'GONE',
+  content: 'DOC', node: 'NODE', route: 'ROUTE', endpoint: 'ENDPOINT', removed: 'GONE',
 };
 
 export function renderCard(card) {

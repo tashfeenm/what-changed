@@ -15,7 +15,14 @@
         "labels": ["payments"],
         "comment_count": 5,
         "last_comment_hash": "b7c8d9",
-        "links": [{ "id": "1001", "type": "blocks", "key": "PROJ-51" }]
+        "links": [{ "id": "1001", "type": "blocks", "key": "PROJ-51" }],
+        "description_adf": {
+          "version": 1,
+          "type": "doc",
+          "content": [
+            { "type": "paragraph", "content": [{ "type": "text", "text": "Rate limit hits 429 at 350 rps in staging." }] }
+          ]
+        }
       }
     },
     {
