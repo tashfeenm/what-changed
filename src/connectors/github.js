@@ -1,6 +1,13 @@
 // GitHub connector: fetch + normalize only; the engine diffs (FOUNDING.md §8).
 // BYOT auth: GITHUB_TOKEN from the environment. Cursor: ISO timestamp per repo.
-import { ensureObject, ingestSnapshot, getCursor, setCursor } from '../core/store.js';
+import {
+  ensureObject,
+  ingestSnapshot,
+  getCursor,
+  setCursor,
+  setWatchFact,
+  clearWatchFact,
+} from '../core/store.js';
 import { githubLens } from '../core/lens.js';
 import { sha256 } from '../core/diff.js';
 
@@ -10,6 +17,7 @@ export async function sync(db, config, env = process.env) {
   const token = env.GITHUB_TOKEN;
   if (!token) throw new Error('GITHUB_TOKEN not set — what-changed is BYOT: create a PAT and export it.');
   const results = { objects: 0, changed: 0 };
+  const viewerLogin = await githubViewerLogin(token);
 
   for (const repo of config.repos ?? []) {
     const since = getCursor(db, 'github', repo);
@@ -26,11 +34,7 @@ export async function sync(db, config, env = process.env) {
     let next = first.toString();
     while (next) {
       const res = await fetch(next, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+        headers: githubHeaders(token),
       });
       if (!res.ok) throw new Error(`GitHub ${repo}: ${res.status} ${await res.text()}`);
       issues.push(...(await res.json()));
@@ -39,6 +43,9 @@ export async function sync(db, config, env = process.env) {
 
     for (const issue of issues) {
       const isPr = Boolean(issue.pull_request);
+      // Derive relevance from the raw response before the normalized payload
+      // boundary, which deliberately does not retain viewer-specific state.
+      const watch = deriveGithubWatch(issue, viewerLogin);
       const object = ensureObject(db, {
         connector: 'github',
         externalId: `${repo}#${issue.number}`,
@@ -47,6 +54,11 @@ export async function sync(db, config, env = process.env) {
         url: issue.html_url,
       });
       const { changed } = ingestSnapshot(db, object, normalize(issue, isPr), { lens: githubLens });
+      // Connector-owned facts describe this observation only. Clearing both
+      // first lets an issue naturally downgrade from assigned to tracked.
+      clearWatchFact(db, object.id, 'assigned');
+      clearWatchFact(db, object.id, 'tracked');
+      setWatchFact(db, object.id, watch.source, { reason: watch.reason });
       results.objects += 1;
       if (changed) results.changed += 1;
     }
@@ -56,7 +68,36 @@ export async function sync(db, config, env = process.env) {
   return results;
 }
 
-function normalize(issue, isPr) {
+function githubHeaders(token) {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
+}
+
+async function githubViewerLogin(token) {
+  try {
+    const res = await fetch(`${API}/user`, { headers: githubHeaders(token) });
+    if (!res.ok) return null;
+    const viewer = await res.json();
+    return viewer?.login ?? null;
+  } catch {
+    // Relevance is best effort: an unavailable viewer endpoint must not turn
+    // an otherwise healthy connector sync into a failure.
+    return null;
+  }
+}
+
+/** Derive the connector-owned relevance fact from a raw GitHub issue. */
+export function deriveGithubWatch(issue, viewerLogin) {
+  if (viewerLogin != null && (issue.assignees ?? []).some((assignee) => assignee?.login === viewerLogin)) {
+    return { source: 'assigned', reason: 'assigned to you' };
+  }
+  return { source: 'tracked', reason: 'in a tracked repo' };
+}
+
+export function normalize(issue, isPr = Boolean(issue.pull_request)) {
   return {
     number: issue.number,
     title: issue.title,

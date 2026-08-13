@@ -2,9 +2,13 @@
 
 export function toCard(row, { whyIndex = null } = {}) {
   const objectLabel = row.object_name ?? row.external_id;
+  const fact = whyIndex?.get(row.object_id);
   return {
     what: `${objectLabel}: ${row.summary}`,
-    why_it_matters: whyIndex?.get(row.object_id) ?? null,
+    // Relevance is a structured fact in the index; cards deliberately expose
+    // only its human-facing reason. Passing the fact itself produces the
+    // unhelpful "[object Object]" in text renderers.
+    why_it_matters: fact?.reason ?? null,
     source: row.connector,
     kind: row.kind,
     object: `${row.connector}:${row.external_id}`,

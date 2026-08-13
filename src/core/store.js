@@ -50,6 +50,25 @@ CREATE TABLE IF NOT EXISTS watchlist (
   weight REAL NOT NULL DEFAULT 1.0,
   updated_at TEXT NOT NULL
 );
+-- watchlist is the legacy, single-winner representation. Keep it for
+-- existing stores, but write new relevance information as independent facts.
+CREATE TABLE IF NOT EXISTS watches (
+  object_id INTEGER NOT NULL REFERENCES objects(id),
+  source TEXT NOT NULL,
+  reason TEXT,
+  weight REAL NOT NULL DEFAULT 1.0,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (object_id, source)
+);
+-- Dependency facts are edges, rather than rows in watches: several observed
+-- issues may independently make the same blocker relevant.
+CREATE TABLE IF NOT EXISTS watch_edges (
+  blocker_object_id INTEGER NOT NULL REFERENCES objects(id),
+  deriving_key TEXT NOT NULL,
+  reason TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (blocker_object_id, deriving_key)
+);
 CREATE TABLE IF NOT EXISTS mutes (
   scope TEXT NOT NULL,      -- 'kind' | 'path' | 'object'
   pattern TEXT NOT NULL,
@@ -71,6 +90,17 @@ function now() {
   return new Date().toISOString();
 }
 
+// Reconciliation can write several edges in one millisecond. Keep timestamps
+// strictly ordered per blocker so its newest deriving edge remains knowable,
+// including after reopening a persisted database.
+function nextEdgeUpdatedAt(db, blockerObjectId) {
+  const latest = db.prepare(
+    'SELECT MAX(updated_at) AS updated_at FROM watch_edges WHERE blocker_object_id = ?'
+  ).get(blockerObjectId)?.updated_at;
+  const latestMs = Date.parse(latest ?? '') || 0;
+  return new Date(Math.max(Date.now(), latestMs + 1)).toISOString();
+}
+
 export function ensureObject(db, { connector, externalId, objectType, name, url }) {
   db.prepare(
     `INSERT INTO objects (connector, external_id, object_type, name, url)
@@ -80,6 +110,160 @@ export function ensureObject(db, { connector, externalId, objectType, name, url 
   return db
     .prepare('SELECT * FROM objects WHERE connector = ? AND external_id = ?')
     .get(connector, externalId);
+}
+
+/**
+ * Record one independently-derived relevance fact. Dependency relevance is
+ * deliberately represented by watch_edges instead; a single fact row could
+ * not retain more than one issue's reason for watching the same blocker.
+ */
+export function setWatchFact(db, objectId, source, { reason = null, weight = 1.0 } = {}) {
+  if (source === 'dependency') {
+    throw new Error('dependency watch facts must use watch_edges');
+  }
+  return db.prepare(
+    `INSERT INTO watches (object_id, source, reason, weight, updated_at)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (object_id, source) DO UPDATE SET
+       reason = excluded.reason,
+       weight = excluded.weight,
+       updated_at = excluded.updated_at`
+  ).run(objectId, source, reason, weight ?? 1.0, now());
+}
+
+/** Remove one independently-derived relevance fact, if it exists. */
+export function clearWatchFact(db, objectId, source) {
+  return db.prepare('DELETE FROM watches WHERE object_id = ? AND source = ?').run(objectId, source);
+}
+
+/**
+ * Clear a source's facts for a set of objects. An empty observation set is a
+ * no-op so connector reconciliation can call this without a special case.
+ */
+export function clearWatchFactsBySource(db, source, objectIds) {
+  const ids = [...new Set(objectIds ?? [])];
+  if (ids.length === 0) return { changes: 0 };
+  const placeholders = ids.map(() => '?').join(', ');
+  return db.prepare(
+    `DELETE FROM watches WHERE source = ? AND object_id IN (${placeholders})`
+  ).run(source, ...ids);
+}
+
+/** Insert or refresh one dependency edge. */
+export function setWatchEdge(db, blockerObjectId, derivingKey, reason = null) {
+  return db.prepare(
+    `INSERT INTO watch_edges (blocker_object_id, deriving_key, reason, updated_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT (blocker_object_id, deriving_key) DO UPDATE SET
+       reason = excluded.reason,
+       updated_at = excluded.updated_at`
+  ).run(blockerObjectId, derivingKey, reason, nextEdgeUpdatedAt(db, blockerObjectId));
+}
+
+/**
+ * Replace every dependency edge derived from one observed issue. Each entry
+ * is { blockerObjectId, reason }; objectId is accepted as a small convenience
+ * for callers that already use that spelling.
+ */
+export function reconcileWatchEdges(db, derivingKey, edges) {
+  // Validate the entire replacement before touching the current derivation.
+  // This makes malformed input a true no-op instead of dropping its old edges.
+  const replacements = [...(edges ?? [])].map((edge) => {
+    const blockerObjectId = edge?.blockerObjectId ?? edge?.objectId;
+    if (!Number.isInteger(blockerObjectId)) {
+      throw new Error('watch edge blockerObjectId must be an integer');
+    }
+    const reason = edge?.reason ?? null;
+    if (reason !== null && typeof reason !== 'string') {
+      throw new Error('watch edge reason must be a string or null');
+    }
+    return { blockerObjectId, reason };
+  });
+
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    db.prepare('DELETE FROM watch_edges WHERE deriving_key = ?').run(derivingKey);
+    for (const edge of replacements) {
+      setWatchEdge(db, edge.blockerObjectId, derivingKey, edge.reason);
+    }
+    db.exec('COMMIT');
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // Preserve the reconciliation failure if rollback cannot run.
+    }
+    throw error;
+  }
+}
+
+// A descriptive alias for integrations that call this operation "replace".
+export const replaceWatchEdges = reconcileWatchEdges;
+
+const WATCH_PRIORITY = new Map([
+  ['tracked', 1],
+  ['manual', 2],
+  ['assigned', 3],
+  ['dependency', 4],
+  ['ignored', 5],
+]);
+
+/**
+ * Resolve fact rows into the effective relevance state at read time. Ignored
+ * is a veto, while dependency reasons come from the freshest deriving edge.
+ */
+export function watchIndex(db) {
+  const ignored = new Set();
+  const winners = new Map();
+  const facts = db.prepare('SELECT object_id, source, reason, weight FROM watches').all();
+
+  for (const fact of facts) {
+    if (fact.source === 'ignored') {
+      ignored.add(fact.object_id);
+      continue;
+    }
+    const priority = WATCH_PRIORITY.get(fact.source) ?? 0;
+    if (priority === 0) continue;
+    const current = winners.get(fact.object_id);
+    if (!current || priority > current.priority) {
+      winners.set(fact.object_id, {
+        priority,
+        source: fact.source,
+        // A tracked row conveys relevance, but its generic reason is noise.
+        reason: fact.source === 'tracked' ? null : fact.reason,
+        weight: Number(fact.weight),
+      });
+    }
+  }
+
+  // Stable secondary ordering gives a deterministic answer if two edge writes
+  // happened in the same clock tick. The primary ordering is updated_at.
+  const edges = db.prepare(
+    `SELECT blocker_object_id, reason, updated_at
+     FROM watch_edges
+     ORDER BY updated_at DESC, rowid DESC`
+  ).all();
+  for (const edge of edges) {
+    if (ignored.has(edge.blocker_object_id)) continue;
+    const priority = WATCH_PRIORITY.get('dependency');
+    const current = winners.get(edge.blocker_object_id);
+    if (!current || priority > current.priority) {
+      winners.set(edge.blocker_object_id, {
+        priority,
+        source: 'dependency',
+        reason: edge.reason,
+        weight: 1.0,
+      });
+    }
+  }
+
+  for (const objectId of ignored) winners.delete(objectId);
+
+  return new Map([...winners].map(([objectId, fact]) => [objectId, {
+    source: fact.source,
+    reason: fact.reason,
+    weight: fact.weight,
+  }]));
 }
 
 /**
@@ -211,14 +395,19 @@ export function setCursor(db, connector, scope, value) {
   ).run(connector, scope, value, now());
 }
 
-/** Unseen deltas joined with their objects, mutes applied. Newest last. */
+/** Unseen deltas joined with their objects, mutes and ignored-watch vetoes applied. Newest last. */
 export function unseenDeltas(db) {
   const mutes = db.prepare('SELECT scope, pattern FROM mutes').all();
   const rows = db
     .prepare(
       `SELECT d.*, o.connector, o.external_id, o.object_type, o.name AS object_name, o.url AS object_url
        FROM deltas d JOIN objects o ON o.id = d.object_id
-       WHERE d.seen_at IS NULL ORDER BY d.observed_at, d.id`
+       WHERE d.seen_at IS NULL
+         AND NOT EXISTS (
+           SELECT 1 FROM watches w
+           WHERE w.object_id = d.object_id AND w.source = 'ignored'
+         )
+       ORDER BY d.observed_at, d.id`
     )
     .all();
   return rows.filter((row) =>

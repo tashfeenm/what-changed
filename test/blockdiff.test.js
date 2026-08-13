@@ -44,6 +44,20 @@ test('blockDiff: same id + same hash → no op (meta-only stability)', () => {
   assert.deepEqual(blockDiff(blocks, blocks.map((b) => ({ ...b }))), []);
 });
 
+test('blockDiff: different native ids are removed and added, never similarity-paired as changed', () => {
+  const before = [{
+    id: 'node-1', idSource: 'native', type: 'node', label: 'FRAME "Hero"',
+    text: 'Checkout hero with a blue button', hash: 'before',
+  }];
+  const after = [{
+    id: 'node-2', idSource: 'native', type: 'node', label: 'FRAME "Hero copy"',
+    text: 'Checkout hero with a blue button and new copy', hash: 'after',
+  }];
+  const ops = blockDiff(before, after);
+  assert.deepEqual(ops.map((op) => op.op).sort(), ['added', 'removed']);
+  assert.ok(!ops.some((op) => op.op === 'changed'));
+});
+
 test('blockDiff: pure moves are reported as moved, not add/remove', () => {
   const reordered = [...v1.slice(1), v1[0]];
   const ops = blockDiff(v1, reordered);

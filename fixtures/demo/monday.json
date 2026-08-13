@@ -1,4 +1,12 @@
 {
+  "edges": [
+    {
+      "connector": "jira",
+      "external_id": "PROJ-42",
+      "deriving_key": "PROJ-51",
+      "reason": "PROJ-51 is blocked by it"
+    }
+  ],
   "observations": [
     {
       "connector": "jira",
