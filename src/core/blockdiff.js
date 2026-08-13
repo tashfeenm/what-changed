@@ -18,6 +18,25 @@ export function blockDiff(blocksA, blocksB) {
   let added = blocksB.filter((blk) => !idsA.has(blk.id));
   const ops = [];
 
+  // Same identity, different fingerprint → the block changed in place. This
+  // is the only way edits surface in native-id formats (Figma nodes,
+  // "METHOD /path" endpoints), where an edit does NOT change the id.
+  for (const [id, { blk: newBlock }] of idsB) {
+    const prev = idsA.get(id);
+    if (!prev) continue;
+    const oldBlock = prev.blk;
+    if ((oldBlock.hash ?? contentOf(oldBlock)) !== (newBlock.hash ?? contentOf(newBlock))) {
+      ops.push({
+        op: 'changed',
+        type: newBlock.type,
+        label: labelOf(newBlock),
+        before: contentOf(oldBlock),
+        after: contentOf(newBlock),
+        summary: changeSummary(oldBlock, newBlock),
+      });
+    }
+  }
+
   // Pair up edits: same type, most-similar content above threshold.
   for (const oldBlock of [...removed]) {
     let best = null;
@@ -84,7 +103,32 @@ function changeSummary(oldBlock, newBlock) {
   if (oldBlock.type === 'table' && newBlock.rows.length !== oldBlock.rows.length) {
     return `table: ${oldBlock.rows.length} → ${newBlock.rows.length} rows`;
   }
-  return `${labelOf(newBlock)} edited`;
+  const metaDelta = metaSummary(oldBlock.meta, newBlock.meta);
+  if (metaDelta && contentOf(oldBlock) === contentOf(newBlock)) {
+    return `${labelOf(newBlock)}: ${metaDelta}`;
+  }
+  return `${labelOf(newBlock)} edited${metaDelta ? ` (${metaDelta})` : ''}`;
+}
+
+/** Format-neutral summary of meta differences ("required param `role` added"). */
+function metaSummary(oldMeta, newMeta) {
+  if (!oldMeta && !newMeta) return null;
+  const parts = [];
+  const keys = new Set([...Object.keys(oldMeta ?? {}), ...Object.keys(newMeta ?? {})]);
+  for (const key of keys) {
+    const a = oldMeta?.[key];
+    const b = newMeta?.[key];
+    if (JSON.stringify(a) === JSON.stringify(b)) continue;
+    if (Array.isArray(a) || Array.isArray(b)) {
+      const setA = new Set((a ?? []).map(String));
+      const setB = new Set((b ?? []).map(String));
+      for (const v of setB) if (!setA.has(v)) parts.push(`${key} ${v} added`);
+      for (const v of setA) if (!setB.has(v)) parts.push(`${key} ${v} removed`);
+    } else {
+      parts.push(`${key}: ${a ?? '(none)'} → ${b ?? '(none)'}`);
+    }
+  }
+  return parts.length ? parts.join(', ') : null;
 }
 
 /** Word-set Jaccard similarity — cheap and good enough to pair edits. */

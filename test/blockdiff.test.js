@@ -30,6 +30,20 @@ test('blockDiff: identical inputs produce no ops', () => {
   assert.deepEqual(blockDiff(v1, v1), []);
 });
 
+test('blockDiff: same id + different hash → changed (native-id formats)', () => {
+  const before = [{ id: 'GET /users', type: 'endpoint', label: 'GET /users', text: 'List users', hash: 'aaa', meta: { params: ['limit(query)'] } }];
+  const after = [{ id: 'GET /users', type: 'endpoint', label: 'GET /users', text: 'List users', hash: 'bbb', meta: { params: ['limit(query)', 'role(query,required)'] } }];
+  const ops = blockDiff(before, after);
+  assert.equal(ops.length, 1);
+  assert.equal(ops[0].op, 'changed');
+  assert.match(ops[0].summary, /params role\(query,required\) added/);
+});
+
+test('blockDiff: same id + same hash → no op (meta-only stability)', () => {
+  const blocks = [{ id: 'n1', type: 'node', label: 'FRAME "Hero"', text: 'Hero', hash: 'ccc' }];
+  assert.deepEqual(blockDiff(blocks, blocks.map((b) => ({ ...b }))), []);
+});
+
 test('blockDiff: pure moves are reported as moved, not add/remove', () => {
   const reordered = [...v1.slice(1), v1[0]];
   const ops = blockDiff(v1, reordered);
