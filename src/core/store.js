@@ -92,50 +92,72 @@ export function ingestSnapshot(db, object, payload, { label = null, lens = null,
   const canonical = canonicalize(payload);
   const hash = sha256(canonical);
   // Re-read the head pointer: the caller's object row may be stale.
-  const head = db.prepare('SELECT last_snapshot_id FROM objects WHERE id = ?').get(object.id);
-  const prev = head?.last_snapshot_id
-    ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(head.last_snapshot_id)
+  const initialHead = db.prepare('SELECT last_snapshot_id FROM objects WHERE id = ?').get(object.id);
+  const initialPrev = initialHead?.last_snapshot_id
+    ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(initialHead.last_snapshot_id)
     : null;
 
-  if (prev && prev.payload_hash === hash && !label) {
-    return { changed: false, snapshotId: prev.id, deltas: [] };
+  if (initialPrev && initialPrev.payload_hash === hash && !label) {
+    return { changed: false, snapshotId: initialPrev.id, deltas: [] };
   }
 
-  const snap = db
-    .prepare('INSERT INTO snapshots (object_id, taken_at, label, payload_hash, payload) VALUES (?, ?, ?, ?, ?)')
-    .run(object.id, now(), label, hash, canonical);
-  const snapshotId = Number(snap.lastInsertRowid);
-  db.prepare('UPDATE objects SET last_snapshot_id = ? WHERE id = ?').run(snapshotId, object.id);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    // The head can advance between the no-op fast path and the write lock.
+    const head = db.prepare('SELECT last_snapshot_id FROM objects WHERE id = ?').get(object.id);
+    const prev = head?.last_snapshot_id
+      ? db.prepare('SELECT * FROM snapshots WHERE id = ?').get(head.last_snapshot_id)
+      : null;
 
-  const deltas = [];
-  if (prev && prev.payload_hash !== hash) {
-    const ops = computeOps(JSON.parse(prev.payload), payload, differs);
-    const insert = db.prepare(
-      `INSERT INTO deltas (object_id, from_snapshot, to_snapshot, observed_at, kind, path, before, after, summary, provenance_url)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    );
-    for (const op of ops) {
-      // Ops from a custom differ arrive pre-lensed (kind + summary set).
-      const semantic = op.kind ? op : lens ? lens(op, payload) : null;
-      if (semantic?.suppress) continue; // lens says: bookkeeping, not news
-      const kind = semantic?.kind ?? 'field';
-      const summary = semantic?.summary ?? defaultSummary(op);
-      const url = semantic?.provenanceUrl ?? provenanceUrl ?? object.url;
-      insert.run(
-        object.id, prev.id, snapshotId, now(), kind, op.path,
-        jsonOrNull(op.before), jsonOrNull(op.after), summary, url ?? null
-      );
-      deltas.push({ objectId: object.id, kind, path: op.path, summary, provenanceUrl: url });
+    if (prev && prev.payload_hash === hash && !label) {
+      db.exec('COMMIT');
+      return { changed: false, snapshotId: prev.id, deltas: [] };
     }
-  } else if (!prev) {
-    // First sighting: record a single 'created' delta so "what's new" includes new objects.
-    db.prepare(
-      `INSERT INTO deltas (object_id, from_snapshot, to_snapshot, observed_at, kind, path, before, after, summary, provenance_url)
-       VALUES (?, NULL, ?, ?, 'created', '/', NULL, NULL, ?, ?)`
-    ).run(object.id, snapshotId, now(), `now tracking: ${object.name ?? object.external_id}`, object.url ?? null);
-  }
 
-  return { changed: true, snapshotId, deltas };
+    const snap = db
+      .prepare('INSERT INTO snapshots (object_id, taken_at, label, payload_hash, payload) VALUES (?, ?, ?, ?, ?)')
+      .run(object.id, now(), label, hash, canonical);
+    const snapshotId = Number(snap.lastInsertRowid);
+    db.prepare('UPDATE objects SET last_snapshot_id = ? WHERE id = ?').run(snapshotId, object.id);
+
+    const deltas = [];
+    if (prev && prev.payload_hash !== hash) {
+      const ops = computeOps(JSON.parse(prev.payload), payload, differs);
+      const insert = db.prepare(
+        `INSERT INTO deltas (object_id, from_snapshot, to_snapshot, observed_at, kind, path, before, after, summary, provenance_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      );
+      for (const op of ops) {
+        // Ops from a custom differ arrive pre-lensed (kind + summary set).
+        const semantic = op.kind ? op : lens ? lens(op, payload) : null;
+        if (semantic?.suppress) continue; // lens says: bookkeeping, not news
+        const kind = semantic?.kind ?? 'field';
+        const summary = semantic?.summary ?? defaultSummary(op);
+        const url = semantic?.provenanceUrl ?? provenanceUrl ?? object.url;
+        insert.run(
+          object.id, prev.id, snapshotId, now(), kind, op.path,
+          jsonOrNull(op.before), jsonOrNull(op.after), summary, url ?? null
+        );
+        deltas.push({ objectId: object.id, kind, path: op.path, summary, provenanceUrl: url });
+      }
+    } else if (!prev) {
+      // First sighting: record a single 'created' delta so "what's new" includes new objects.
+      db.prepare(
+        `INSERT INTO deltas (object_id, from_snapshot, to_snapshot, observed_at, kind, path, before, after, summary, provenance_url)
+         VALUES (?, NULL, ?, ?, 'created', '/', NULL, NULL, ?, ?)`
+      ).run(object.id, snapshotId, now(), `now tracking: ${object.name ?? object.external_id}`, object.url ?? null);
+    }
+
+    db.exec('COMMIT');
+    return { changed: true, snapshotId, deltas };
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // Preserve the ingest failure if rollback cannot run.
+    }
+    throw error;
+  }
 }
 
 /**

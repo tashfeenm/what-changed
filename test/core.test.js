@@ -50,6 +50,56 @@ test('identical payload is a no-op; changed payload produces lensed deltas', () 
   assert.deepEqual(summaries, ['2 new comments', 'status: To Do → Done']);
 });
 
+test('ingestSnapshot rolls back when a custom differ throws', () => {
+  const db = openStore(':memory:');
+  const object = ensureObject(db, {
+    connector: 'test', externalId: 'rollback-differ', objectType: 'item', name: 'Rollback differ', url: null,
+  });
+  const first = ingestSnapshot(db, object, { value: 'before' });
+  const snapshotCount = db.prepare('SELECT COUNT(*) AS count FROM snapshots').get().count;
+  const deltaCount = db.prepare('SELECT COUNT(*) AS count FROM deltas').get().count;
+
+  assert.throws(
+    () => ingestSnapshot(db, object, { value: 'after' }, {
+      differs: { value: () => { throw new Error('differ failed'); } },
+    }),
+    /differ failed/
+  );
+
+  const head = db.prepare('SELECT last_snapshot_id FROM objects WHERE id = ?').get(object.id);
+  assert.equal(Number(head.last_snapshot_id), first.snapshotId);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM snapshots').get().count, snapshotCount);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM deltas').get().count, deltaCount);
+});
+
+test('ingestSnapshot rolls back inserted deltas when a lens throws', () => {
+  const db = openStore(':memory:');
+  const object = ensureObject(db, {
+    connector: 'test', externalId: 'rollback-lens', objectType: 'item', name: 'Rollback lens', url: null,
+  });
+  const first = ingestSnapshot(db, object, { first: 'before', second: 'before' });
+  const snapshotCount = db.prepare('SELECT COUNT(*) AS count FROM snapshots').get().count;
+  const deltaCount = db.prepare('SELECT COUNT(*) AS count FROM deltas').get().count;
+  let lensCalls = 0;
+
+  assert.throws(
+    () => ingestSnapshot(db, object, { first: 'after', second: 'after' }, {
+      lens: () => {
+        lensCalls += 1;
+        if (lensCalls === 2) throw new Error('lens failed');
+        return null;
+      },
+    }),
+    /lens failed/
+  );
+
+  const head = db.prepare('SELECT last_snapshot_id FROM objects WHERE id = ?').get(object.id);
+  assert.equal(lensCalls, 2);
+  assert.equal(Number(head.last_snapshot_id), first.snapshotId);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM snapshots').get().count, snapshotCount);
+  assert.equal(db.prepare('SELECT COUNT(*) AS count FROM deltas').get().count, deltaCount);
+});
+
 test('seen baseline: markSeen clears the digest; mutes filter kinds', () => {
   const db = openStore(':memory:');
   ingestFixtureFile(db, join(FIXTURES, 'monday.json'));

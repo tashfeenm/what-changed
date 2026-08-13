@@ -12,7 +12,7 @@
   },
   "scripts": {
     "demo": "node src/cli.js demo",
-    "test": "node --test test/"
+    "test": "node --test test/*.test.js"
   },
   "dependencies": {
     "read-better": "file:../read-better"

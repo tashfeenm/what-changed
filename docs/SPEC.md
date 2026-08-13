@@ -54,10 +54,13 @@ Normalization collapses whitespace, trims, and lowercases.
 `fingerprint(block)` computes:
 
 ```text
-sha256(type + ":" + normalize(contentOf(block)) + ":" + canonicalMeta(meta))[0:12]
+sha256(type + ":" + normalize(contentOf(block)) + ":" + canonicalMeta(meta)
+       + ":" + canonicalStructure(block))[0:12]
 ```
 
 `canonicalMeta()` sorts top-level keys. Array values are converted to strings and sorted. Object-valued metadata is not recursively key-sorted.
+
+`canonicalStructure()` (added Batch 1, 2026-08-13) covers the structural fields `level`, `language`, `ordered`, `panelType`, `title`, and `ids` — keys sorted, but the `ids` array order PRESERVED (media rendering is order-sensitive, so a reorder must change the hash).
 
 For content-derived blocks, `finalizeBlocks()` computes:
 
@@ -83,7 +86,7 @@ The codec assigns `type`, content fields, optional `label`, optional `meta`, and
 
 Native-ID blocks are never similarity-re-paired. A native ID names a real upstream entity: a changed Figma node or OpenAPI endpoint retains its ID and is detected by a different `hash`; two different native IDs represent different things and must remain remove/add operations.
 
-One current fingerprint limitation is important: type-specific top-level fields other than `type`, content, and `meta` do not participate. Changes to ADF/Markdown `level`, `language`, `ordered`, `panelType`, `title`, or media `ids` can therefore be invisible when the comparable content stays unchanged.
+(The v0.1-draft fingerprint limitation — structural fields not participating — was closed by Batch 1: a heading level change or code-language change with identical text now produces a same-id/different-hash `changed` op. Verified by six table-driven cases in `read-better/test/codec.test.js`.)
 
 ### 2.2 Codec contract and registry
 
@@ -900,11 +903,12 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Figma native nodes and rendering | ✅ | `test/structured.test.js`. |
 | OpenAPI JSON/YAML parsing and rendering | ✅ | `test/structured.test.js`. |
 | Postman collection parsing | P2 | Implemented; no fixture or test. |
-| Type-specific fingerprint completeness | P1 | Move `level`, `language`, `ordered`, `panelType`, `title`, and media IDs into fingerprinted metadata or otherwise include them. |
+| Type-specific fingerprint completeness | ✅ | Batch 1 (2026-08-13): `canonicalStructure()` in fingerprint; six table-driven cases in `test/codec.test.js`, ids order-sensitive. Sol sign-off. |
 | CLI facade | P2 | Implemented but has no automated CLI tests. |
 | TypeScript declaration accuracy | P2 | Declarations exist but have no compile test. |
-| README/CLI format status | P2 | README and CLI help still say implemented codecs are “next” or “more coming.” |
-| npm test/publish readiness | P2 | Fix the `node --test test/` script and verify packed package/bin/types. |
+| README/CLI format status | ✅ | Batch 1: CLI help and README list the implemented seven formats; no stale “coming” claims. |
+| npm test script | ✅ | Batch 1: `node --test test/*.test.js`; `npm test` verified in both repos. |
+| npm publish readiness | P2 | Verify packed package/bin/types (pack/install smoke). |
 
 ### 5.2 what-changed core and current facades
 
@@ -933,7 +937,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | SQLite WAL | P2 | Enabled but not asserted. |
 | Cursors | P1 | Implemented but untested; must be covered with recorded/live connector behavior. |
 | Labeled snapshots and `snapshotByLabel` | P1 | Schema/API support exists; no test or CLI verb. |
-| Transactional snapshot ingestion | P1 | Snapshot insert, head update, and delta inserts need one transaction to prevent partial baselines. |
+| Transactional snapshot ingestion | ✅ | Batch 1 (2026-08-13): `BEGIN IMMEDIATE` with in-transaction head re-read, rollback + rethrow; two failure-point rollback tests in `test/core.test.js`. Sol sign-off. |
 | Relevance engine | P1 | No watchlist seeding, ranking, dependency graph, or importance threshold. |
 | Jira dependency edges | P1 | Links are normalized and diffed but never seed/watch related issues. |
 | `why_it_matters` | P1 | Injection hook exists; current CLI cards always emit `null`. |
@@ -948,7 +952,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Jira connector | P1 | JQL pagination/BYOT code exists, but no connector-level automated test. |
 | `sync`, `report`, `mark-seen`, `mute`, `gc` CLI | P2 | Implemented; no CLI integration suite. |
 | Tokenless demo | P2 | Runs successfully; add an automated digest golden. |
-| README privacy claim | P1 | README says comment/body text is hashed, but Jira `description_adf` is stored in full. Clarify or implement policy. |
+| README privacy claim | ✅ | Batch 1: README states per-source behavior precisely (Jira: latest-comment hash only, full ADF descriptions; GitHub: comment count only, body hash). `store_content` knob remains P2. |
 | Idempotent/safe connector loop proof | P1 | Content no-ops help, but recorded and live failure/retry tests are absent. |
 
 ### 5.3 Remaining breadth and distribution
@@ -994,7 +998,7 @@ cd /Users/tashfeenmahmud/Projects/src/what-changed
 node --test test/*.test.js
 ```
 
-The package scripts currently use `node --test test/`. Under the audit runtime, Node.js v25.8.0 treated `test/` as a module path and both `npm test` commands failed before discovering the suites.
+The package scripts originally used `node --test test/`, which Node.js v25 treats as a module path — both `npm test` commands failed before discovering the suites. **Fixed in Batch 1** (`node --test test/*.test.js`); `npm test` now discovers and passes both suites (27 read-better / 19 what-changed after Batch 1's added tests).
 
 Audit execution results:
 

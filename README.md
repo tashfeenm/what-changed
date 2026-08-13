@@ -67,8 +67,11 @@ See [FOUNDING.md](./FOUNDING.md). Short version: connectors fetch +
 normalize only; read-better parses formats into canonical blocks (`id` =
 identity, `hash` = fingerprint); one block differ + one value differ own all
 comparison; **seen ≠ synced** (only an explicit ack moves your baseline);
-comment/body text is hashed, not stored, and aged snapshot payloads are
-garbage-collected on every sync.
+Jira stores no comment text, only the latest fetched comment body hash
+(`last_comment_hash`), while GitHub stores a comment count only and hashes
+issue/PR bodies (`body_hash`). Jira descriptions are stored as full ADF for
+block-level diffing. A configurable `store_content` redaction knob is
+planned, and aged snapshot payloads are garbage-collected on every sync.
 
 ## Status
 
