@@ -1,0 +1,30 @@
+{
+  "openapi": "3.1.0",
+  "info": { "title": "Acme Checkout API", "version": "1.4.0" },
+  "security": [{ "bearerAuth": [] }],
+  "paths": {
+    "/users": {
+      "get": {
+        "summary": "List users",
+        "parameters": [
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer" } }
+        ],
+        "responses": { "200": {}, "401": {} }
+      },
+      "post": {
+        "summary": "Create user",
+        "requestBody": { "content": { "application/json": {} } },
+        "responses": { "201": {}, "400": {} }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "summary": "Fetch an order",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": {}, "404": {} }
+      }
+    }
+  }
+}

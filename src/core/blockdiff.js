@@ -37,11 +37,16 @@ export function blockDiff(blocksA, blocksB) {
     }
   }
 
-  // Pair up edits: same type, most-similar content above threshold.
+  // Pair up edits: same type, most-similar content above threshold. ONLY for
+  // content-derived ids, where an edit changes the id — native-id blocks with
+  // different ids are genuinely different things (their edits were already
+  // caught by the same-id/different-hash pass above).
   for (const oldBlock of [...removed]) {
+    if (oldBlock.idSource === 'native') continue;
     let best = null;
     for (const newBlock of added) {
       if (newBlock.type !== oldBlock.type) continue;
+      if (newBlock.idSource === 'native') continue;
       const score = similarity(contentOf(oldBlock), contentOf(newBlock));
       if (score >= 0.4 && (!best || score > best.score)) best = { newBlock, score };
     }

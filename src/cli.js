@@ -4,10 +4,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parse as parseAdf } from 'read-better';
 import { openStore, unseenDeltas, markSeen, addMute } from './core/store.js';
-import { blockDiff } from './core/blockdiff.js';
-import { jsonDiff } from './core/diff.js';
+import { diffFiles } from './diff-files.js';
 import { toCard, renderDigest } from './core/cards.js';
 import { ingestFixtureFile } from './connectors/fixture.js';
 import * as github from './connectors/github.js';
@@ -65,42 +63,12 @@ function cmdMute(scope, pattern) {
   console.log(`Muted ${scope}: ${pattern}`);
 }
 
-// Ad-hoc diff of two files — the generic "what changed between A and B"
-// checker. Rich formats route through read-better's codec; plain JSON falls
-// back to the structural differ.
-function cmdDiffFiles(pathA, pathB, { json = false } = {}) {
-  if (!pathA || !pathB) fail('Usage: what-changed diff <fileA> <fileB> [--json]');
-  const a = JSON.parse(readFileSync(resolve(pathA), 'utf8'));
-  const b = JSON.parse(readFileSync(resolve(pathB), 'utf8'));
-  const adfA = pluckAdf(a);
-  const adfB = pluckAdf(b);
-
-  let ops;
-  if (adfA && adfB) {
-    ops = blockDiff(parseAdf(adfA), parseAdf(adfB));
-  } else {
-    ops = jsonDiff(a, b).map((op) => ({
-      ...op,
-      summary: `${op.path.split('/').filter(Boolean).join('.') || 'value'}: ${fmt(op.before)} → ${fmt(op.after)}`,
-    }));
-  }
-
+function cmdDiffFiles(pathA, pathB, { json = false, format = null } = {}) {
+  if (!pathA || !pathB) fail('Usage: what-changed diff <fileA> <fileB> [--json] [--format <id>]');
+  const ops = diffFiles(pathA, pathB, format);
   if (json) console.log(JSON.stringify(ops, null, 2));
   else if (!ops.length) console.log('No changes.');
   else for (const op of ops) console.log(`[${op.op.toUpperCase()}] ${op.summary}`);
-}
-
-function pluckAdf(doc) {
-  if (doc?.type === 'doc') return doc;
-  if (doc?.fields?.description?.type === 'doc') return doc.fields.description;
-  if (doc?.body?.atlas_doc_format?.value) return JSON.parse(doc.body.atlas_doc_format.value);
-  if (doc?.body?.type === 'doc') return doc.body;
-  return null;
-}
-
-function fmt(v) {
-  const s = v === null || v === undefined ? 'null' : typeof v === 'string' ? v : JSON.stringify(v);
-  return s.length > 60 ? s.slice(0, 57) + '…' : s;
 }
 
 function cmdDemo() {
@@ -123,7 +91,11 @@ const [cmd, ...rest] = process.argv.slice(2);
 switch (cmd) {
   case 'sync': await cmdSync(); break;
   case 'report': cmdReport({ json: rest.includes('--json'), ack: rest.includes('--ack') }); break;
-  case 'diff': cmdDiffFiles(rest[0], rest[1], { json: rest.includes('--json') }); break;
+  case 'diff': {
+    const fi = rest.indexOf('--format');
+    cmdDiffFiles(rest[0], rest[1], { json: rest.includes('--json'), format: fi >= 0 ? rest[fi + 1] : null });
+    break;
+  }
   case 'mark-seen': cmdMarkSeen(); break;
   case 'mute': cmdMute(rest[0], rest[1]); break;
   case 'demo': cmdDemo(); break;
