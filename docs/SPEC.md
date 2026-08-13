@@ -920,7 +920,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Block add/remove/change/move | ✅ | `test/blockdiff.test.js`. |
 | Same-native-ID/different-hash detection | ✅ | `test/blockdiff.test.js`. |
 | Similarity re-pairing for content IDs | ✅ | ADF and Markdown edited blocks exercise it. |
-| Native IDs never cross-paired | P1 | Code guards it; add an explicit different-native-ID adversarial test. |
+| Native IDs never cross-paired | ✅ | Batch 2: adversarial test — different native ids, near-identical content → removed+added, never 'changed'. |
 | Document/data routing and mixed refusal | ✅ | `test/diff-files.test.js`. |
 | Content-addressed head no-op | ✅ | `test/core.test.js`. |
 | First sightings and unseen baseline | ✅ | Fixture ingestion asserts three created rows. |
@@ -932,17 +932,17 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Basic Jira/GitHub lens output | ✅ | Fixture test asserts Jira status/priority/content and GitHub ready transition. |
 | Complete lens rule matrix | P2 | Add direct tests for every rule, suppression, decreases, removals, and sorted-array insertion behavior. |
 | Fixture connector | ✅ | Used throughout `test/core.test.js`. |
-| Change-card object contract | P1 | Implemented but has no automated shape/snapshot test. |
+| Change-card object contract | ✅ | Batch 2: exact key-set/type test incl. non-null `why_it_matters` (string, never the fact object). |
 | Digest rendering | P2 | Demo works manually; add golden output coverage. |
 | SQLite WAL | P2 | Enabled but not asserted. |
 | Cursors | P1 | Implemented but untested; must be covered with recorded/live connector behavior. |
 | Labeled snapshots and `snapshotByLabel` | P1 | Schema/API support exists; no test or CLI verb. |
 | Transactional snapshot ingestion | ✅ | Batch 1 (2026-08-13): `BEGIN IMMEDIATE` with in-transaction head re-read, rollback + rethrow; two failure-point rollback tests in `test/core.test.js`. Sol sign-off. |
-| Relevance engine | P1 | No watchlist seeding, ranking, dependency graph, or importance threshold. |
-| Jira dependency edges | P1 | Links are normalized and diffed but never seed/watch related issues. |
-| `why_it_matters` | P1 | Injection hook exists; current CLI cards always emit `null`. |
+| Relevance engine | ✅ | Batch 2 (2026-08-13): `watches` fact table (per-source rows, read-time priority `ignored > dependency > assigned > manual > tracked`, ignored veto enforced in `unseenDeltas`), connector seeding from raw objects with no payload churn. `test/relevance.test.js`. Importance thresholds/usage learning remain P2. |
+| Jira dependency edges | ✅ | Batch 2: `watch_edges (blocker, deriving_key)` with atomic per-deriving-key reconciliation; one-hop relevance-neutral blocker refetch (chunked `key in (…)`); shared-blocker survival tested. |
+| `why_it_matters` | ✅ | Batch 2: cards emit the winning watch fact's reason; demo renders "↳ PROJ-51 is blocked by it"; non-null case in card-shape test. |
 | Exact-change provenance | P1 | Cards link to object pages, not exact upstream changes. |
-| Watch/unwatch and blocker/breakage filters | P1 | Promised as v0.1 noise controls in `FOUNDING.md`; absent. |
+| Watch/unwatch and blocker filters | ✅ | Batch 2: `watch`/`unwatch` verbs (unwatch = persistent ignored veto; watch un-ignores), `report --only <kinds|blockers>` composing with `--ack`. Breakage filters remain P2 (need captured-mode runs). |
 | Merkle/subtree hashes | P1 | `FOUNDING.md` promises `subtree_hashes`; no table or implementation exists. |
 | `capture --label` CLI | P1 | Snapshot `label` exists; no capture workflow or verb. |
 | Jira upstream changelog ingestion | P1 | Bulk changelog endpoint is promised; connector snapshot-diffs JQL search results. |
