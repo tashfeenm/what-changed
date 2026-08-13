@@ -1,6 +1,6 @@
 # what-changed — Founding Document
 
-> **Status:** FOUNDING DRAFT v0.2 — post-consult (Asha + Gem via Squeak, 2026-08-12)
+> **Status:** FOUNDING v0.3 — post-consult (Asha + Gem via Squeak) + prototype SHIPPED (2026-08-12): core store/diff/lenses/cards, Jira+GitHub connectors, fixture demo, CLI with autodetect ad-hoc diff. Reading/parsing extracted to sibling repo **read-better** (Tashfeen, same day): read-better makes reading efficient; what-changed answers "what changed?"
 > **Date:** 2026-08-12
 > **Authors:** Claud (Fable 5) + Tashfeen
 > **License decision:** MIT (adoption-first; monetization is downstream of adoption — see §9)
@@ -196,21 +196,22 @@ interface Connector {
 - **Semantic lenses:** path→meaning tables — data files, cheap to add,
   golden-tested (§10).
 
-**Codecs (the parser layer, between fetch and diff).** Raw content formats
-are not diffable as strings: Confluence bodies are storage-format XHTML with
-`<ac:structured-macro>` blocks or ADF (Atlassian Document Format JSON, also
-Jira's rich-text format); specs are OpenAPI/collection JSON with positional
-paths. Each format gets a **codec**: a pure function (no network, golden-
-tested) that parses it into one canonical block tree — typed blocks
-(heading, paragraph, code, table, macro, endpoint) with stable identities —
-so the same identity-keyed tree diff serves documents, designs, and specs
-alike. Parsing happens once at ingest; reports never re-parse, and digests
-can name the changed block ("code block in section 'Deployment' changed")
-and rehydrate only that block's before/after on demand. Codec build order:
-ADF (serves Jira + Confluence), Confluence storage XHTML, OpenAPI/Postman
-collection, Playwright a11y YAML (near-free), Markdown (makes local repo
-docs diffable — dogfooding). Connectors stay transport (fetch+normalize);
-codecs own format; the diff core stays singular.
+**Codecs (the parser layer, between fetch and diff) — live in the sibling
+library [read-better](../read-better).** Raw content formats are not
+diffable as strings: Jira/Confluence rich text is ADF JSON; specs are
+OpenAPI/collection JSON with positional paths; Figma files are node trees.
+Each format gets a **codec**: a pure function (no network, golden-tested)
+that parses it into canonical blocks with a two-part contract — `id`
+(identity: WHICH block; native when the format has real ids, content-derived
+otherwise) and `hash` (fingerprint: WHAT it says, meta included). Same id +
+different hash = changed in place; native-id blocks are never
+similarity-re-paired. Shipped codecs (2026-08-12): ADF, Markdown, JSON +
+YAML outline mode (shape-not-values + RFC 6901 `get`), Figma files,
+OpenAPI/Postman, Playwright a11y snapshots. Division of labor: read-better
+makes reading token-efficient (render/outline/get); what-changed owns ALL
+comparison (`blockDiff` + `jsonDiff`) and routes document formats to block
+diffing, data formats to value diffing. Connectors stay transport
+(fetch+normalize); codecs own format; the diff core stays singular.
 
 **Relevance:**
 - **Watchlist seeding:** assigned-to-me, @-mentioned, I-commented,
@@ -285,16 +286,17 @@ is the asset.
 Repo shape:
 
 ```
-what-changed/
-  packages/core/          # store, diff engine, merkle, redaction, GC,
-                          # change cards, relevance
-  packages/codecs/        # adf/ confluence-storage/ openapi/ a11y-yaml/ md/
-                          # — pure format→canonical-block-tree parsers
-  packages/connectors/    # jira/ github/ … each: connector.ts + lens.json
-  packages/cli/           # CLI entry (skill + CI both call this)
-  packages/mcp/           # MCP server over core
-  packages/skill/         # SKILL.md
-  packages/dashboard/     # post-v0.1: local server + static HTML export
+read-better/              # SIBLING REPO — token-efficient reading
+  src/registry.js         # format detection (JSON-first, md hint-gated)
+  src/codecs/             # adf/ markdown/ json/ yaml/ figma/ openapi/ a11y
+  src/{blocks,yaml,outline}.js, SKILL.md
+
+what-changed/             # THIS REPO — the delta engine (deps: read-better)
+  src/core/               # store (SQLite), jsonDiff, blockDiff, lenses, cards
+  src/connectors/         # jira/ github/ + profiles (lens + field differs)
+  src/diff-files.js       # ad-hoc "what changed between A and B" checker
+  src/cli.js              # sync | report | diff | mark-seen | mute | demo
+  # later: mcp/ (v0.2 facade), skill/, dashboard/
 ```
 
 ## 11. Risks
