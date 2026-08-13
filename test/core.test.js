@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { jsonDiff, canonicalize } from '../src/core/diff.js';
-import { openStore, ensureObject, ingestSnapshot, unseenDeltas, markSeen, addMute } from '../src/core/store.js';
+import { openStore, ensureObject, ingestSnapshot, unseenDeltas, markSeen, addMute, gc } from '../src/core/store.js';
 import { jiraLens } from '../src/core/lens.js';
 import { ingestFixtureFile } from '../src/connectors/fixture.js';
 
@@ -71,4 +71,27 @@ test('seen baseline: markSeen clears the digest; mutes filter kinds', () => {
 
   addMute(db, 'kind', 'comment');
   assert.ok(unseenDeltas(db).every((r) => r.kind !== 'comment'));
+});
+
+test('gc: drops aged non-head payloads only after their deltas are seen', () => {
+  const db = openStore(':memory:');
+  ingestFixtureFile(db, join(FIXTURES, 'monday.json'));
+  ingestFixtureFile(db, join(FIXTURES, 'tuesday.json'));
+
+  // Unseen deltas reference the monday snapshots — nothing may drop yet.
+  assert.equal(gc(db, { retainDays: 0 }), 0);
+
+  markSeen(db);
+  const dropped = gc(db, { retainDays: 0 });
+  assert.ok(dropped >= 1, `expected drops, got ${dropped}`);
+
+  // Heads keep payloads (needed for the next diff); hashes survive everywhere.
+  const rows = db.prepare(
+    `SELECT s.id, s.payload, s.payload_hash,
+            (s.id IN (SELECT last_snapshot_id FROM objects)) AS is_head
+     FROM snapshots s`
+  ).all();
+  assert.ok(rows.every((r) => r.payload_hash));
+  assert.ok(rows.filter((r) => r.is_head).every((r) => r.payload !== null));
+  assert.ok(rows.filter((r) => !r.is_head).every((r) => r.payload === null));
 });

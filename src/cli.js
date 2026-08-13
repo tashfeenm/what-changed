@@ -4,7 +4,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openStore, unseenDeltas, markSeen, addMute } from './core/store.js';
+import { openStore, unseenDeltas, markSeen, addMute, gc } from './core/store.js';
 import { diffFiles } from './diff-files.js';
 import { toCard, renderDigest } from './core/cards.js';
 import { ingestFixtureFile } from './connectors/fixture.js';
@@ -33,6 +33,9 @@ async function cmdSync() {
     const results = await connector.sync(db, config.connectors[name]);
     console.log(`${name}: ${results.objects} objects checked, ${results.changed} changed`);
   }
+  // GC rides along with every sync — the store must not bloat.
+  const dropped = gc(db, { retainDays: config.retain_days ?? 30 });
+  if (dropped) console.log(`gc: dropped ${dropped} aged snapshot payload${dropped > 1 ? 's' : ''}`);
 }
 
 function cmdReport({ json = false, ack = false } = {}) {
@@ -98,6 +101,12 @@ switch (cmd) {
   }
   case 'mark-seen': cmdMarkSeen(); break;
   case 'mute': cmdMute(rest[0], rest[1]); break;
+  case 'gc': {
+    const di = rest.indexOf('--days');
+    const dropped = gc(openConfiguredStore(loadConfig()), { retainDays: di >= 0 ? Number(rest[di + 1]) : 30 });
+    console.log(`Dropped ${dropped} aged snapshot payload${dropped === 1 ? '' : 's'} (hashes and deltas kept).`);
+    break;
+  }
   case 'demo': cmdDemo(); break;
   default:
     console.log(`what-changed — a local change-memory layer for work tools
@@ -112,6 +121,7 @@ Usage:
   what-changed mark-seen            Reset your baseline to now
   what-changed mute <kind|path|object> <pattern>
                                     Silence a delta kind, path prefix, or object
+  what-changed gc [--days N]        Drop aged snapshot payloads (auto-runs on sync)
   what-changed demo                 Self-contained fixture demo (no tokens needed)
 
 Auth is BYOT: GITHUB_TOKEN, JIRA_BASE_URL + JIRA_EMAIL + JIRA_API_TOKEN.`);

@@ -226,3 +226,31 @@ export function addMute(db, scope, pattern) {
 export function snapshotByLabel(db, label) {
   return db.prepare('SELECT * FROM snapshots WHERE label = ? ORDER BY id DESC').get(label) ?? null;
 }
+
+/**
+ * Garbage collection — the store must not bloat (a11y trees and Figma files
+ * are large). Drops RAW PAYLOADS (keeping payload_hash and all computed
+ * deltas) from snapshots that are:
+ *   - not any object's current head (needed for the next diff),
+ *   - not labeled (captured-mode snapshots stay addressable by label),
+ *   - older than the retention window, and
+ *   - not referenced by any UNSEEN delta (unseen before/after context stays
+ *     rehydratable until acknowledged).
+ * Returns the number of payloads dropped.
+ */
+export function gc(db, { retainDays = 30 } = {}) {
+  const cutoff = new Date(Date.now() - retainDays * 24 * 60 * 60 * 1000).toISOString();
+  const result = db.prepare(
+    `UPDATE snapshots SET payload = NULL
+     WHERE payload IS NOT NULL
+       AND label IS NULL
+       AND taken_at < ?
+       AND id NOT IN (SELECT last_snapshot_id FROM objects WHERE last_snapshot_id IS NOT NULL)
+       AND NOT EXISTS (
+         SELECT 1 FROM deltas d
+         WHERE (d.from_snapshot = snapshots.id OR d.to_snapshot = snapshots.id)
+           AND d.seen_at IS NULL
+       )`
+  ).run(cutoff);
+  return Number(result.changes);
+}

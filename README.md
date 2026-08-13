@@ -1,12 +1,13 @@
 # what-changed
 
 > A local change-memory layer for work tools. Ask an agent **"what changed?"**
-> across Jira, GitHub (and soon Confluence, Salesforce, Figma, builds, and API
-> versions) — get a provenance-linked answer computed against *your* baseline.
+> across Jira, GitHub (Confluence, Salesforce, Figma tracking coming) — or
+> between any two versions of a file — and get a provenance-linked answer
+> computed against *your* baseline.
 
 **Why:** "What changed?" is only answerable relative to what you last saw.
-APIs are stateless; so are MCPs and every AI recap bot. `what-changed` keeps a
-local, user-owned SQLite baseline and diffs against it. Git diff for
+APIs are stateless; so are MCPs and every AI recap bot. `what-changed` keeps
+a local, user-owned SQLite baseline and diffs against it. Git diff for
 everything your agent needs to remember.
 
 ## Try it in 10 seconds (no tokens needed)
@@ -15,7 +16,25 @@ everything your agent needs to remember.
 node src/cli.js demo
 ```
 
-## Real usage (BYOT — bring your own token)
+## Ad-hoc diff: any two versions of anything supported
+
+```bash
+what-changed diff design-v1.json design-v2.json     # Figma file JSON
+# [CHANGED] FRAME "Checkout / Desktop": children: 3 → 4
+# [CHANGED] TEXT "Title" edited
+# [ADDED]   INSTANCE "TrustBadge" added
+
+what-changed diff api-v1.json api-v2.json           # OpenAPI / Postman
+# [CHANGED] GET /users: params role(query,required) added
+# [REMOVED] GET /orders/{id} removed
+```
+
+Formats auto-detect via the sibling library
+[read-better](../read-better): Markdown, ADF (Jira/Confluence rich text),
+Figma files, OpenAPI/Postman, Playwright a11y snapshots — plus structural
+value diff for plain JSON/YAML. Mixed formats refuse loudly.
+
+## Tracked mode (BYOT — bring your own token)
 
 ```bash
 export GITHUB_TOKEN=ghp_…              # a classic PAT with repo scope
@@ -31,29 +50,31 @@ cat > what-changed.config.json <<'EOF'
 }
 EOF
 
-what-changed sync        # pull current state into your local baseline
+what-changed sync          # pull current state into your local baseline
 # … time passes …
 what-changed sync
-what-changed report      # what changed since you last looked
+what-changed report        # what changed since you last looked
 what-changed report --ack  # …and mark it seen
 ```
 
 Every delta is a **change card**: what happened, why it matters, and a
 provenance deep-link to the exact upstream change. `--json` emits cards
-machine-readably (this is what the MCP server and skill consume).
+machine-readably (what the future MCP server and the skill consume).
 
 ## Design
 
-See [FOUNDING.md](./FOUNDING.md). Short version: connectors fetch + normalize
-only; a generic structural diff plus per-connector **semantic lenses** turn
-snapshots into human deltas; `seen` is an explicit act, never a side effect of
-syncing; comment/body text is hashed, not stored (redaction by default).
+See [FOUNDING.md](./FOUNDING.md). Short version: connectors fetch +
+normalize only; read-better parses formats into canonical blocks (`id` =
+identity, `hash` = fingerprint); one block differ + one value differ own all
+comparison; **seen ≠ synced** (only an explicit ack moves your baseline);
+comment/body text is hashed, not stored, and aged snapshot payloads are
+garbage-collected on every sync.
 
 ## Status
 
-Founding prototype: core store + diff + lenses + change cards, GitHub and
-Jira connectors, fixture corpus, CLI. Next: MCP server, skill, Figma
-node-tree differ, Playwright/Postman captured mode, Confluence, Salesforce
-(Service Cloud cases).
+Working prototype: core store + differs + lenses + change cards, GitHub and
+Jira Cloud connectors, ad-hoc multi-format diff, GC, fixture golden corpus,
+CLI + SKILL.md. Next: Confluence and Salesforce (Service Cloud cases)
+connectors, Playwright/Postman captured-mode labels, MCP facade, dashboard.
 
 MIT.
