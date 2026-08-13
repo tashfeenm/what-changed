@@ -1,16 +1,18 @@
 // Connector profiles: everything the ingest path needs per connector —
-// the semantic lens plus any per-field custom differs. Kept out of core so
-// core stays dependency-free; format expertise lives in codecs (adf-codec).
-import { diff as adfDiff } from 'adf-codec';
+// the semantic lens plus any per-field custom differs. Format expertise
+// (parsing, labels) comes from read-better; comparison lives in our core.
+import { parse } from 'read-better';
+import { blockDiff } from '../core/blockdiff.js';
 import { githubLens, jiraLens } from '../core/lens.js';
 
 const EMPTY_DOC = { type: 'doc', version: 1, content: [] };
 
-/** ADF field differ: block-level ops with adf-codec's edit re-pairing. */
+/** ADF field differ: parse both versions, diff at block level. */
 export function adfFieldDiffer(fieldName, label = 'description') {
   return (before, after) => {
     try {
-      return adfDiff(before ?? EMPTY_DOC, after ?? EMPTY_DOC).map((op) => ({
+      const ops = blockDiff(parse(before ?? EMPTY_DOC), parse(after ?? EMPTY_DOC));
+      return ops.map((op) => ({
         op: 'replace',
         path: `/${fieldName}`,
         before: op.before ?? null,

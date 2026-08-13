@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "type": "doc",
+  "content": [
+    { "type": "heading", "attrs": { "level": 1 }, "content": [{ "type": "text", "text": "Checkout Redesign — Rollout Plan" }] },
+    { "type": "paragraph", "content": [
+      { "type": "text", "text": "Owner: " },
+      { "type": "mention", "attrs": { "id": "5b10a", "text": "@Dana Osei" } },
+      { "type": "text", "text": ". Target: " },
+      { "type": "text", "text": "Q3", "marks": [{ "type": "strong" }] },
+      { "type": "text", "text": "." }
+    ] },
+    { "type": "panel", "attrs": { "panelType": "warning" }, "content": [
+      { "type": "paragraph", "content": [{ "type": "text", "text": "Payment service rate limits are still unresolved (PROJ-42)." }] }
+    ] },
+    { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Deployment" }] },
+    { "type": "codeBlock", "attrs": { "language": "bash" }, "content": [{ "type": "text", "text": "helm upgrade checkout ./charts/checkout --set replicas=2" }] },
+    { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Tasks" }] },
+    { "type": "taskList", "content": [
+      { "type": "taskItem", "attrs": { "state": "DONE" }, "content": [{ "type": "text", "text": "Feature flag created" }] },
+      { "type": "taskItem", "attrs": { "state": "TODO" }, "content": [{ "type": "text", "text": "Load test at 2x traffic" }] },
+      { "type": "taskItem", "attrs": { "state": "TODO" }, "content": [{ "type": "text", "text": "Update runbook" }] }
+    ] },
+    { "type": "heading", "attrs": { "level": 2 }, "content": [{ "type": "text", "text": "Rollback" }] },
+    { "type": "paragraph", "content": [
+      { "type": "text", "text": "Flip the flag off; no data migration involved. See " },
+      { "type": "text", "text": "runbook", "marks": [{ "type": "link", "attrs": { "href": "https://example.atlassian.net/wiki/runbook" } }] },
+      { "type": "text", "text": "." }
+    ] },
+    { "type": "table", "content": [
+      { "type": "tableRow", "content": [
+        { "type": "tableHeader", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Stage" }] }] },
+        { "type": "tableHeader", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Traffic" }] }] }
+      ] },
+      { "type": "tableRow", "content": [
+        { "type": "tableCell", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "Canary" }] }] },
+        { "type": "tableCell", "content": [{ "type": "paragraph", "content": [{ "type": "text", "text": "5%" }] }] }
+      ] }
+    ] }
+  ]
+}
