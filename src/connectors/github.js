@@ -14,21 +14,28 @@ export async function sync(db, config, env = process.env) {
   for (const repo of config.repos ?? []) {
     const since = getCursor(db, 'github', repo);
     const syncStartedAt = new Date().toISOString();
-    const url = new URL(`${API}/repos/${repo}/issues`);
-    url.searchParams.set('state', 'all');
-    url.searchParams.set('per_page', '100');
-    url.searchParams.set('sort', 'updated');
-    if (since) url.searchParams.set('since', since);
+    const first = new URL(`${API}/repos/${repo}/issues`);
+    first.searchParams.set('state', 'all');
+    first.searchParams.set('per_page', '100');
+    first.searchParams.set('sort', 'updated');
+    if (since) first.searchParams.set('since', since);
 
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-    });
-    if (!res.ok) throw new Error(`GitHub ${repo}: ${res.status} ${await res.text()}`);
-    const issues = await res.json();
+    // Follow RFC 5988 Link pagination — a busy repo overflows one page on
+    // the first sync, and silent truncation would corrupt the baseline.
+    const issues = [];
+    let next = first.toString();
+    while (next) {
+      const res = await fetch(next, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+      if (!res.ok) throw new Error(`GitHub ${repo}: ${res.status} ${await res.text()}`);
+      issues.push(...(await res.json()));
+      next = (res.headers.get('link') ?? '').match(/<([^>]+)>;\s*rel="next"/)?.[1] ?? null;
+    }
 
     for (const issue of issues) {
       const isPr = Boolean(issue.pull_request);
