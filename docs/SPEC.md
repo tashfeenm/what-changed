@@ -9,6 +9,41 @@
 > Owner: Tashfeen  
 > Source of truth: the code and tests in `read-better` and `what-changed`; discrepancies with README, SKILL, or FOUNDING claims are recorded in the status ledger.
 
+## 0. Status & Proposed Next Steps (updated 2026-08-15)
+
+**Where things stand.** Four batches have landed through the
+Terra-implements / Sol-signs-off / Claud-orchestrates pipeline since this
+spec was drafted:
+
+| Batch | Landed | Contents | Tests after |
+|---|---|---|---|
+| 1 | 2026-08-13 | Correctness: structural-field fingerprints, transactional ingestion, npm test scripts, precise privacy wording, lockfile | 27 rb / 19 wc |
+| 2 | 2026-08-13 | Relevance engine: watch facts + dependency edges, `why_it_matters`, watch/unwatch/`--only`, ignored veto (1 sign-off rejection + fix round) | 41 wc |
+| 3 | 2026-08-15 | Captured mode: `capture --label`, `captures`, `diff --labels`, replayCapture, atomic label uniqueness | 54 wc |
+| 4 | 2026-08-15 | Connector hardening: recorded fixtures, 11 behavior tests, cursor proofs — zero production changes needed | 66 wc |
+
+Every original P1 in §5 is now ✅ except the three items below. Both repos
+are private on GitHub (`tashfeenm/read-better`, `tashfeenm/what-changed`).
+
+**Remaining, in proposed order:**
+
+1. **Batch 5 (proposed): Jira changelog ingestion + exact-change
+   provenance** — one coherent brief closing the last two design-flavored
+   P1s: ingest Jira's bulk changelog endpoint (upstream-native deltas
+   instead of snapshot inference where available) and deep-link cards to
+   the specific comment/changelog entry rather than the issue page.
+2. **Live API validation** — needs Tashfeen (GitHub PAT; later a Jira
+   instance). All behavior is recorded-fixture-proven; one real `sync`
+   closes the final credibility gap. Pairs well with recording a demo GIF.
+3. **Merkle/subtree hashes — recommend formal descope.** FOUNDING §6
+   promises them; nothing at current file sizes needs them
+   (payload-level content addressing already gives cheap no-ops). Proposal:
+   amend FOUNDING to "deferred until a measured perf case", drop from P1.
+4. **Then P2 breadth**, roughly in value order: Confluence connector
+   (cheap on the hardened base), CI workflows (both repos), Salesforce /
+   Service Cloud connector, npm publish prep, MCP facade, dashboard,
+   `store_content` redaction knob, retry/backoff, usage learning.
+
 ## 1. Overview
 
 `read-better` makes reading work-tool formats token-efficient. `what-changed` answers “what changed?” by comparing those formats or maintaining a local baseline across observations.
