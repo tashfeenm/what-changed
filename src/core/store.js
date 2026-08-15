@@ -79,11 +79,67 @@ CREATE INDEX IF NOT EXISTS idx_deltas_unseen ON deltas(seen_at) WHERE seen_at IS
 CREATE INDEX IF NOT EXISTS idx_snapshots_object ON snapshots(object_id, taken_at);
 `;
 
+const SNAPSHOT_LABEL_UNIQUE_INDEX = 'idx_snapshots_object_label_unique';
+
 export function openStore(dbPath) {
   const db = new DatabaseSync(dbPath);
   db.exec('PRAGMA journal_mode = WAL;');
   db.exec(SCHEMA);
+  migrateSnapshotLabelUniqueness(db);
   return db;
+}
+
+/**
+ * Older stores allowed duplicate labels on an object. Repair them before
+ * installing the partial unique index so an upgrade can never be blocked by
+ * historical data. The earliest snapshot keeps its label; later rows receive
+ * a deterministic, collision-safe suffix.
+ */
+function migrateSnapshotLabelUniqueness(db) {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    const duplicateGroups = db.prepare(
+      `SELECT object_id, label
+       FROM snapshots
+       WHERE label IS NOT NULL
+       GROUP BY object_id, label
+       HAVING COUNT(*) > 1
+       ORDER BY object_id, label`
+    ).all();
+    const snapshotsForLabel = db.prepare(
+      'SELECT id FROM snapshots WHERE object_id = ? AND label = ? ORDER BY id ASC'
+    );
+    const labelExists = db.prepare(
+      'SELECT 1 FROM snapshots WHERE object_id = ? AND label = ? LIMIT 1'
+    );
+    const renameSnapshot = db.prepare('UPDATE snapshots SET label = ? WHERE id = ?');
+
+    for (const group of duplicateGroups) {
+      const duplicates = snapshotsForLabel.all(group.object_id, group.label);
+      // Keep the first snapshot's label, matching the pre-unique-index order.
+      for (const snapshot of duplicates.slice(1)) {
+        let replacement = `${group.label}~${snapshot.id}`;
+        while (labelExists.get(group.object_id, replacement)) {
+          replacement = `${replacement}~${snapshot.id}`;
+        }
+        renameSnapshot.run(replacement, snapshot.id);
+      }
+    }
+
+    db.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS ${SNAPSHOT_LABEL_UNIQUE_INDEX}
+       ON snapshots(object_id, label)
+       WHERE label IS NOT NULL`
+    );
+    db.exec('COMMIT');
+  } catch (error) {
+    try {
+      db.exec('ROLLBACK');
+    } catch {
+      // Preserve the migration failure if rollback cannot run.
+    }
+    throw error;
+  }
 }
 
 function now() {
@@ -329,16 +385,29 @@ export function ingestSnapshot(db, object, payload, { label = null, lens = null,
       db.prepare(
         `INSERT INTO deltas (object_id, from_snapshot, to_snapshot, observed_at, kind, path, before, after, summary, provenance_url)
          VALUES (?, NULL, ?, ?, 'created', '/', NULL, NULL, ?, ?)`
-      ).run(object.id, snapshotId, now(), `now tracking: ${object.name ?? object.external_id}`, object.url ?? null);
+      ).run(
+        object.id,
+        snapshotId,
+        now(),
+        `now tracking: ${object.name ?? object.external_id}`,
+        provenanceUrl ?? object.url ?? null
+      );
     }
 
     db.exec('COMMIT');
     return { changed: true, snapshotId, deltas };
   } catch (error) {
+    const duplicateLabel =
+      object.connector === 'capture' &&
+      label !== null &&
+      isSnapshotLabelConstraint(error);
     try {
       db.exec('ROLLBACK');
     } catch {
       // Preserve the ingest failure if rollback cannot run.
+    }
+    if (duplicateLabel) {
+      throw new Error(`label ${label} already exists in series ${object.external_id}`);
     }
     throw error;
   }
@@ -346,7 +415,9 @@ export function ingestSnapshot(db, object, payload, { label = null, lens = null,
 
 /**
  * Generic structural diff, with per-field custom differs. A differ owns one
- * top-level field: (before, after) => ops with kind + summary already set.
+ * top-level field: (before, after, { prevPayload, newPayload }) => ops with
+ * kind + summary already set. The third argument is additive, so existing
+ * two-argument differs continue to work unchanged.
  * Rich formats (ADF documents, node trees) need format-aware diffing — the
  * generic diff would see an edited block as remove+add.
  */
@@ -361,10 +432,14 @@ function computeOps(prevPayload, newPayload, differs) {
     delete prevRest[field];
     delete newRest[field];
     if (canonicalize(before ?? null) !== canonicalize(after ?? null)) {
-      ops.push(...differ(before, after));
+      ops.push(...differ(before, after, { prevPayload, newPayload }));
     }
   }
   return [...jsonDiff(prevRest, newRest), ...ops];
+}
+
+function isSnapshotLabelConstraint(error) {
+  return /UNIQUE constraint failed: snapshots\.object_id, snapshots\.label/.test(error?.message ?? '');
 }
 
 function defaultSummary(op) {
@@ -436,6 +511,88 @@ export function addMute(db, scope, pattern) {
 
 export function snapshotByLabel(db, label) {
   return db.prepare('SELECT * FROM snapshots WHERE label = ? ORDER BY id DESC').get(label) ?? null;
+}
+
+/**
+ * Resolve a labeled captured snapshot. Labels assigned by tracked connectors
+ * intentionally stay outside captured-mode lookup, even when they have the
+ * same text.
+ */
+export function resolveLabeledSnapshot(db, label, { series = null } = {}) {
+  validateCaptureLabel(label);
+  validateCaptureSeries(series);
+
+  const clauses = ["o.connector = 'capture'", 's.label = ?'];
+  const params = [label];
+  if (series !== null) {
+    clauses.push('o.external_id = ?');
+    params.push(series);
+  }
+  const rows = db.prepare(
+    `SELECT s.*, o.external_id AS series
+     FROM snapshots s
+     JOIN objects o ON o.id = s.object_id
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY o.external_id ASC, s.id ASC`
+  ).all(...params);
+
+  if (rows.length === 0) {
+    throw new Error(
+      series === null
+        ? `capture label ${label} not found`
+        : `capture label ${label} not found in series ${series}`
+    );
+  }
+  if (series === null && rows.length > 1) {
+    throw new Error(
+      `capture label ${label} is ambiguous across series: ${rows.map((row) => row.series).join(', ')}`
+    );
+  }
+  return rows[0];
+}
+
+/** List every labeled capture, oldest first (and deterministically by ID). */
+export function labeledSnapshots(db, { series = null } = {}) {
+  validateCaptureSeries(series);
+  const clauses = ["o.connector = 'capture'", 's.label IS NOT NULL'];
+  const params = [];
+  if (series !== null) {
+    clauses.push('o.external_id = ?');
+    params.push(series);
+  }
+  const rows = db.prepare(
+    `SELECT o.external_id AS series, s.label, s.taken_at, s.payload
+     FROM snapshots s
+     JOIN objects o ON o.id = s.object_id
+     WHERE ${clauses.join(' AND ')}
+     ORDER BY s.taken_at ASC, s.id ASC`
+  ).all(...params);
+  return rows.map(({ series: snapshotSeries, label, taken_at, payload }) => ({
+    series: snapshotSeries,
+    label,
+    taken_at,
+    format: storedFormat(payload),
+  }));
+}
+
+function validateCaptureLabel(label) {
+  if (typeof label !== 'string' || label.trim() === '') {
+    throw new Error('label must not be empty');
+  }
+}
+
+function validateCaptureSeries(series) {
+  if (series !== null && (typeof series !== 'string' || series.trim() === '')) {
+    throw new Error('series must not be empty');
+  }
+}
+
+function storedFormat(payload) {
+  try {
+    return JSON.parse(payload ?? 'null')?.format ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**

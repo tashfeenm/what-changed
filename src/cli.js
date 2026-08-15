@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // what-changed CLI — one of the doors over the same core (FOUNDING.md §9).
-// Commands: sync | report | diff | mark-seen | mute | watch | unwatch | demo
+// Commands: sync | report | diff | capture | captures | mark-seen | mute | watch | unwatch | demo
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -11,10 +11,12 @@ import {
   addMute,
   clearWatchFact,
   gc,
+  labeledSnapshots,
   setWatchFact,
   watchIndex,
 } from './core/store.js';
 import { diffFiles } from './diff-files.js';
+import { captureFile, diffLabels } from './capture.js';
 import { toCard, renderDigest } from './core/cards.js';
 import { ingestFixtureFile } from './connectors/fixture.js';
 import * as github from './connectors/github.js';
@@ -122,12 +124,65 @@ function findObject(db, connector, externalId) {
   return db.prepare('SELECT * FROM objects WHERE connector = ? AND external_id = ?').get(connector, externalId);
 }
 
-function cmdDiffFiles(pathA, pathB, { json = false, format = null } = {}) {
-  if (!pathA || !pathB) fail('Usage: what-changed diff <fileA> <fileB> [--json] [--format <id>]');
-  const ops = diffFiles(pathA, pathB, format);
+function printDiffOps(ops, { json = false } = {}) {
   if (json) console.log(JSON.stringify(ops, null, 2));
   else if (!ops.length) console.log('No changes.');
   else for (const op of ops) console.log(`[${op.op.toUpperCase()}] ${op.summary}`);
+}
+
+function cmdDiffFiles(pathA, pathB, { json = false, format = null } = {}) {
+  if (!pathA || !pathB) fail('Usage: what-changed diff <fileA> <fileB> [--json] [--format <id>]');
+  const ops = diffFiles(pathA, pathB, format);
+  printDiffOps(ops, { json });
+}
+
+function cmdCapture(filePath, { label, series = null, format = null } = {}) {
+  const result = captureFile(openConfiguredStore(loadConfig()), filePath, { label, series, format });
+  const shape = result.kind === 'document' ? `${result.blocks} blocks` : 'data';
+  console.log(`captured ${result.series} @ ${result.label} (${result.format}, ${shape})`);
+  if (result.hadPrevious) {
+    const noun = result.deltas.length === 1 ? 'delta' : 'deltas';
+    console.log(`${result.deltas.length} ${noun} recorded.`);
+  }
+}
+
+function cmdCaptures({ series = null } = {}) {
+  const rows = labeledSnapshots(openConfiguredStore(loadConfig()), { series });
+  if (!rows.length) {
+    console.log('No labeled captures.');
+    return;
+  }
+  for (const row of rows) {
+    console.log(`${row.series} @ ${row.label} (${row.taken_at}, ${row.format})`);
+  }
+}
+
+function cmdDiffLabels(labelA, labelB, { series = null, json = false } = {}) {
+  const ops = diffLabels(openConfiguredStore(loadConfig()), labelA, labelB, { series });
+  printDiffOps(ops, { json });
+}
+
+function optionValues(args, flag, count, usage) {
+  const indexes = args.reduce((found, value, index) => value === flag ? [...found, index] : found, []);
+  if (!indexes.length) return null;
+  if (indexes.length > 1) fail(usage);
+  const values = args.slice(indexes[0] + 1, indexes[0] + 1 + count);
+  if (values.length !== count || values.some((value) => !value || value.startsWith('--'))) fail(usage);
+  return count === 1 ? values[0] : values;
+}
+
+function positionalArgs(args, optionArity, usage) {
+  const positional = [];
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    if (Object.hasOwn(optionArity, value)) {
+      index += optionArity[value];
+      continue;
+    }
+    if (value.startsWith('--')) fail(usage);
+    positional.push(value);
+  }
+  return positional;
 }
 
 function cmdDemo() {
@@ -159,8 +214,38 @@ switch (cmd) {
     break;
   }
   case 'diff': {
-    const fi = rest.indexOf('--format');
-    cmdDiffFiles(rest[0], rest[1], { json: rest.includes('--json'), format: fi >= 0 ? rest[fi + 1] : null });
+    const labelsUsage = 'Usage: what-changed diff --labels <a> <b> [--series <name>] [--json]';
+    if (rest.includes('--labels')) {
+      const labels = optionValues(rest, '--labels', 2, labelsUsage);
+      const series = optionValues(rest, '--series', 1, labelsUsage);
+      const positional = positionalArgs(rest, { '--labels': 2, '--series': 1, '--json': 0 }, labelsUsage);
+      if (!labels || positional.length) fail(labelsUsage);
+      cmdDiffLabels(labels[0], labels[1], { series, json: rest.includes('--json') });
+      break;
+    }
+    const filesUsage = 'Usage: what-changed diff <fileA> <fileB> [--json] [--format <id>]';
+    const format = optionValues(rest, '--format', 1, filesUsage);
+    const paths = positionalArgs(rest, { '--format': 1, '--json': 0 }, filesUsage);
+    if (paths.length !== 2) fail(filesUsage);
+    cmdDiffFiles(paths[0], paths[1], { json: rest.includes('--json'), format });
+    break;
+  }
+  case 'capture': {
+    const usage = 'Usage: what-changed capture <file> --label <name> [--series <name>] [--format <id>]';
+    const label = optionValues(rest, '--label', 1, usage);
+    const series = optionValues(rest, '--series', 1, usage);
+    const format = optionValues(rest, '--format', 1, usage);
+    const paths = positionalArgs(rest, { '--label': 1, '--series': 1, '--format': 1 }, usage);
+    if (!label || paths.length !== 1) fail(usage);
+    cmdCapture(paths[0], { label, series, format });
+    break;
+  }
+  case 'captures': {
+    const usage = 'Usage: what-changed captures [--series <name>]';
+    const series = optionValues(rest, '--series', 1, usage);
+    const positional = positionalArgs(rest, { '--series': 1 }, usage);
+    if (positional.length) fail(usage);
+    cmdCaptures({ series });
     break;
   }
   case 'mark-seen': cmdMarkSeen(); break;
@@ -188,9 +273,15 @@ Usage:
   what-changed sync                 Pull changes from configured connectors
   what-changed report [--json] [--ack] [--only <kind[,kind…]|blockers>]
                                     Show changes since you last looked; --only supports delta kinds or blockers
-  what-changed diff <fileA> <fileB> [--json]
+  what-changed diff <fileA> <fileB> [--json] [--format <id>]
                                     Ad-hoc diff of two files (ADF via codec,
                                     plain JSON via structural diff)
+  what-changed diff --labels <a> <b> [--series <name>] [--json]
+                                    Diff two captures in the same series
+  what-changed capture <file> --label <name> [--series <name>] [--format <id>]
+                                    Save a named, point-in-time file capture
+  what-changed captures [--series <name>]
+                                    List named captures, oldest first
   what-changed mark-seen            Reset your baseline to now
   what-changed mute <kind|path|object> <pattern>
                                     Silence a delta kind, path prefix, or object
