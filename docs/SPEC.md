@@ -935,7 +935,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Change-card object contract | ✅ | Batch 2: exact key-set/type test incl. non-null `why_it_matters` (string, never the fact object). |
 | Digest rendering | P2 | Demo works manually; add golden output coverage. |
 | SQLite WAL | P2 | Enabled but not asserted. |
-| Cursors | P1 | Implemented but untested; must be covered with recorded/live connector behavior. |
+| Cursors | ✅ | Batch 4 (2026-08-15): unit round-trip/scoping/refresh + behavior proofs — start-time capture bracketed (t0 ≤ cursor ≤ handler-entered), failure never advances, second-sync since/JQL reuse. |
 | Labeled snapshots / captured mode | ✅ | Batch 3 (2026-08-15): `capture --label` / `captures` / `diff --labels` (series model, {format, content} payloads, replayCapture, cross-format deltas owned by the format differ, collision-safe label migration + partial unique index, first-capture provenance). `test/capture.test.js`. |
 | Transactional snapshot ingestion | ✅ | Batch 1 (2026-08-13): `BEGIN IMMEDIATE` with in-transaction head re-read, rollback + rethrow; two failure-point rollback tests in `test/core.test.js`. Sol sign-off. |
 | Relevance engine | ✅ | Batch 2 (2026-08-13): `watches` fact table (per-source rows, read-time priority `ignored > dependency > assigned > manual > tracked`, ignored veto enforced in `unseenDeltas`), connector seeding from raw objects with no payload churn. `test/relevance.test.js`. Importance thresholds/usage learning remain P2. |
@@ -948,12 +948,12 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Jira upstream changelog ingestion | P1 | Bulk changelog endpoint is promised; connector snapshot-diffs JQL search results. |
 | GitHub upstream-native event ingestion | P1 | `FOUNDING.md` claims events/GraphQL; code polls REST issues and snapshot-diffs them. |
 | Live API validation | P1 | Neither connector has been exercised by repository tests against a real API. |
-| GitHub connector | P1 | Pagination/BYOT code exists, but no connector-level automated test. |
-| Jira connector | P1 | JQL pagination/BYOT code exists, but no connector-level automated test. |
+| GitHub connector | ✅ | Batch 4: recorded-fixture behavior tests — Link pagination, DB-read payload golden (literal body_hash), auth/BYOT errors, buffered-pages failure semantics pinned (no partial ingest). Live validation still pending. |
+| Jira connector | ✅ | Batch 4: recorded-fixture behavior tests — nextPageToken pagination, full-fields golden (literal last_comment_hash), JQL cursor reuse, page-by-page partial-ingest pinned, blocker `key in` query without `updated` clause. Live validation still pending. |
 | `sync`, `report`, `mark-seen`, `mute`, `gc` CLI | P2 | Implemented; no CLI integration suite. |
 | Tokenless demo | P2 | Runs successfully; add an automated digest golden. |
 | README privacy claim | ✅ | Batch 1: README states per-source behavior precisely (Jira: latest-comment hash only, full ADF descriptions; GitHub: comment count only, body hash). `store_content` knob remains P2. |
-| Idempotent/safe connector loop proof | P1 | Content no-ops help, but recorded and live failure/retry tests are absent. |
+| Idempotent/safe connector loop proof | ✅ (recorded) | Batch 4: failure semantics pinned per connector; cursor never advances on failure; content-addressing makes re-sync no-ops. Retry/backoff itself remains P2 (unbuilt); live failure tests await a PAT. |
 
 ### 5.3 Remaining breadth and distribution
 
@@ -964,7 +964,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Tracked Figma connector | P2 | File/version acquisition, node/version provenance, and cursor strategy. |
 | Captured Playwright workflow | P2 | Named a11y snapshots; optional screenshot evidence. |
 | Captured Postman/OpenAPI workflow | P2 | Named spec/run-report snapshots and run-result comparison. |
-| Recorded-API-fixture connector tests | P2 | Pagination, normalization, cursor, auth-error, and retry fixtures for GitHub/Jira. |
+| Recorded-API-fixture connector tests | ✅ | Batch 4: `fixtures/recorded/` + `test/helpers/recorded.js` stub + `test/connectors.test.js` (11 tests). Retry fixtures deferred with the retry feature (P2). |
 | CI workflows | P2 | Supported Node matrix, test, demo smoke, package validation. |
 | npm publish preparation | P2 | Repair scripts, remove stale `../adf-codec` lock entry, pack/install smoke tests, metadata review. |
 | MCP facade | P2 | `what_changed(scope, since)` and `diff(a, b)` over the same core/cards. |
