@@ -936,7 +936,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Digest rendering | P2 | Demo works manually; add golden output coverage. |
 | SQLite WAL | P2 | Enabled but not asserted. |
 | Cursors | P1 | Implemented but untested; must be covered with recorded/live connector behavior. |
-| Labeled snapshots and `snapshotByLabel` | P1 | Schema/API support exists; no test or CLI verb. |
+| Labeled snapshots / captured mode | ✅ | Batch 3 (2026-08-15): `capture --label` / `captures` / `diff --labels` (series model, {format, content} payloads, replayCapture, cross-format deltas owned by the format differ, collision-safe label migration + partial unique index, first-capture provenance). `test/capture.test.js`. |
 | Transactional snapshot ingestion | ✅ | Batch 1 (2026-08-13): `BEGIN IMMEDIATE` with in-transaction head re-read, rollback + rethrow; two failure-point rollback tests in `test/core.test.js`. Sol sign-off. |
 | Relevance engine | ✅ | Batch 2 (2026-08-13): `watches` fact table (per-source rows, read-time priority `ignored > dependency > assigned > manual > tracked`, ignored veto enforced in `unseenDeltas`), connector seeding from raw objects with no payload churn. `test/relevance.test.js`. Importance thresholds/usage learning remain P2. |
 | Jira dependency edges | ✅ | Batch 2: `watch_edges (blocker, deriving_key)` with atomic per-deriving-key reconciliation; one-hop relevance-neutral blocker refetch (chunked `key in (…)`); shared-blocker survival tested. |
@@ -944,7 +944,7 @@ This framework adds exact provenance, transactional ingestion, fingerprint compl
 | Exact-change provenance | P1 | Cards link to object pages, not exact upstream changes. |
 | Watch/unwatch and blocker filters | ✅ | Batch 2: `watch`/`unwatch` verbs (unwatch = persistent ignored veto; watch un-ignores), `report --only <kinds|blockers>` composing with `--ack`. Breakage filters remain P2 (need captured-mode runs). |
 | Merkle/subtree hashes | P1 | `FOUNDING.md` promises `subtree_hashes`; no table or implementation exists. |
-| `capture --label` CLI | P1 | Snapshot `label` exists; no capture workflow or verb. |
+| `capture --label` CLI | ✅ | Batch 3 — see "Labeled snapshots / captured mode" row. Captured Playwright/Postman workflows in §5.3 now reduce to "run the tool, capture its output file". |
 | Jira upstream changelog ingestion | P1 | Bulk changelog endpoint is promised; connector snapshot-diffs JQL search results. |
 | GitHub upstream-native event ingestion | P1 | `FOUNDING.md` claims events/GraphQL; code polls REST issues and snapshot-diffs them. |
 | Live API validation | P1 | Neither connector has been exercised by repository tests against a real API. |
