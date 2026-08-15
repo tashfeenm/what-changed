@@ -1,0 +1,107 @@
+[
+  {
+    "id": 910001,
+    "node_id": "I_kwDOAcme1s5f",
+    "number": 101,
+    "title": "Add idempotency keys to checkout capture",
+    "state": "open",
+    "locked": false,
+    "html_url": "https://github.com/acme/widgets/pull/101",
+    "user": {
+      "login": "octo-viewer",
+      "id": 12345,
+      "type": "User"
+    },
+    "labels": [
+      {
+        "id": 7001,
+        "node_id": "LA_kwDOAcme1s8AAAAB",
+        "url": "https://api.github.com/repos/acme/widgets/labels/payments",
+        "name": "payments",
+        "color": "b60205",
+        "default": false,
+        "description": "Payment processing work"
+      },
+      {
+        "id": 7002,
+        "node_id": "LA_kwDOAcme1s8AAAAC",
+        "url": "https://api.github.com/repos/acme/widgets/labels/ready%20for%20review",
+        "name": "ready for review",
+        "color": "0e8a16",
+        "default": false,
+        "description": null
+      }
+    ],
+    "assignee": {
+      "login": "octo-viewer",
+      "id": 12345,
+      "type": "User"
+    },
+    "assignees": [
+      {
+        "login": "octo-viewer",
+        "id": 12345,
+        "type": "User"
+      },
+      {
+        "login": "lee",
+        "id": 23456,
+        "type": "User"
+      }
+    ],
+    "milestone": {
+      "id": 44,
+      "number": 3,
+      "title": "Q3 checkout reliability",
+      "state": "open",
+      "description": "Keep payment capture safe during the Q3 rollout."
+    },
+    "comments": 2,
+    "created_at": "2026-08-10T09:00:00Z",
+    "updated_at": "2026-08-12T14:31:22Z",
+    "closed_at": null,
+    "author_association": "MEMBER",
+    "draft": false,
+    "pull_request": {
+      "url": "https://api.github.com/repos/acme/widgets/pulls/101",
+      "html_url": "https://github.com/acme/widgets/pull/101",
+      "diff_url": "https://github.com/acme/widgets/pull/101.diff",
+      "patch_url": "https://github.com/acme/widgets/pull/101.patch",
+      "merged_at": null
+    },
+    "body": "Adds idempotency keys to capture requests.\n\nRollout is guarded by the payments flag."
+  },
+  {
+    "id": 910002,
+    "node_id": "I_kwDOAcme1s6A",
+    "number": 102,
+    "title": "Document the capture retry header",
+    "state": "open",
+    "locked": false,
+    "html_url": "https://github.com/acme/widgets/issues/102",
+    "user": {
+      "login": "mira",
+      "id": 34567,
+      "type": "User"
+    },
+    "labels": [
+      "documentation",
+      "good first issue"
+    ],
+    "assignee": null,
+    "assignees": [
+      {
+        "login": "lee",
+        "id": 23456,
+        "type": "User"
+      }
+    ],
+    "milestone": null,
+    "comments": 0,
+    "created_at": "2026-08-11T10:20:00Z",
+    "updated_at": "2026-08-12T11:05:00Z",
+    "closed_at": null,
+    "author_association": "CONTRIBUTOR",
+    "body": "Explain how clients should retry a timed-out capture request."
+  }
+]

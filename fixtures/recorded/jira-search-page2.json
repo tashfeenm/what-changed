@@ -1,0 +1,46 @@
+{
+  "issues": [
+    {
+      "id": "10003",
+      "key": "PAY-102",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10003",
+      "fields": {
+        "summary": "Publish retry guidance for SDK clients",
+        "status": {
+          "self": "https://acme.atlassian.net/rest/api/3/status/1",
+          "description": "The issue is open and ready for work.",
+          "iconUrl": "https://acme.atlassian.net/images/icons/statuses/open.png",
+          "name": "To Do",
+          "id": "1",
+          "statusCategory": {
+            "id": 2,
+            "key": "new",
+            "colorName": "blue-gray",
+            "name": "To Do"
+          }
+        },
+        "assignee": null,
+        "priority": {
+          "self": "https://acme.atlassian.net/rest/api/3/priority/3",
+          "iconUrl": "https://acme.atlassian.net/images/icons/priorities/medium.svg",
+          "name": "Medium",
+          "id": "3"
+        },
+        "labels": [
+          "docs",
+          "payments"
+        ],
+        "description": null,
+        "comment": {
+          "startAt": 0,
+          "maxResults": 0,
+          "total": 0,
+          "comments": []
+        },
+        "issuelinks": [],
+        "updated": "2026-08-13T08:10:00.000-0700"
+      }
+    }
+  ],
+  "isLast": true
+}

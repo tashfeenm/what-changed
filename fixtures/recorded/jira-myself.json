@@ -1,0 +1,10 @@
+{
+  "self": "https://acme.atlassian.net/rest/api/3/user?accountId=acct-viewer",
+  "accountId": "acct-viewer",
+  "emailAddress": "viewer@example.test",
+  "displayName": "Octo Viewer",
+  "active": true,
+  "timeZone": "America/Vancouver",
+  "locale": "en_US",
+  "accountType": "atlassian"
+}

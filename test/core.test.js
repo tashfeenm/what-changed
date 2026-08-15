@@ -13,8 +13,10 @@ import {
   markSeen,
   addMute,
   gc,
+  getCursor,
   resolveLabeledSnapshot,
   labeledSnapshots,
+  setCursor,
 } from '../src/core/store.js';
 import { jiraLens } from '../src/core/lens.js';
 import { ingestFixtureFile } from '../src/connectors/fixture.js';
@@ -44,6 +46,37 @@ test('jsonDiff: arrays of identifiable objects diff by id, stable under reorder'
   assert.equal(ops.length, 1);
   assert.equal(ops[0].path, '/1/v');
   assert.equal(ops[0].after, 'z');
+});
+
+test('cursors round-trip, upsert, scope independently, and refresh updated_at', () => {
+  const db = openStore(':memory:');
+
+  assert.equal(getCursor(db, 'jira', 'project = TERRA'), null);
+
+  setCursor(db, 'jira', 'project = TERRA', '2026-01-01T00:00:00.000Z');
+  assert.equal(getCursor(db, 'jira', 'project = TERRA'), '2026-01-01T00:00:00.000Z');
+
+  setCursor(db, 'jira', 'project = TERRA', '2026-01-02T00:00:00.000Z');
+  assert.equal(getCursor(db, 'jira', 'project = TERRA'), '2026-01-02T00:00:00.000Z');
+
+  setCursor(db, 'jira', 'project = ATLAS', '2026-01-03T00:00:00.000Z');
+  assert.equal(getCursor(db, 'jira', 'project = TERRA'), '2026-01-02T00:00:00.000Z');
+  assert.equal(getCursor(db, 'jira', 'project = ATLAS'), '2026-01-03T00:00:00.000Z');
+
+  const oldUpdatedAt = '2000-01-01T00:00:00.000Z';
+  db.prepare('UPDATE cursors SET updated_at = ? WHERE connector = ? AND scope = ?')
+    .run(oldUpdatedAt, 'jira', 'project = TERRA');
+  assert.equal(
+    db.prepare('SELECT updated_at FROM cursors WHERE connector = ? AND scope = ?')
+      .get('jira', 'project = TERRA').updated_at,
+    oldUpdatedAt
+  );
+
+  setCursor(db, 'jira', 'project = TERRA', '2026-01-04T00:00:00.000Z');
+  const refreshed = db.prepare('SELECT cursor_value, updated_at FROM cursors WHERE connector = ? AND scope = ?')
+    .get('jira', 'project = TERRA');
+  assert.equal(refreshed.cursor_value, '2026-01-04T00:00:00.000Z');
+  assert.notEqual(refreshed.updated_at, oldUpdatedAt);
 });
 
 test('identical payload is a no-op; changed payload produces lensed deltas', () => {
@@ -144,6 +177,12 @@ test('gc: drops aged non-head payloads only after their deltas are seen', () => 
   assert.equal(gc(db, { retainDays: 0 }), 0);
 
   markSeen(db);
+  // Make the retention condition deterministic rather than relying on a
+  // just-created timestamp landing before a zero-day cutoff.
+  db.prepare(
+    `UPDATE snapshots SET taken_at = ?
+     WHERE id NOT IN (SELECT last_snapshot_id FROM objects WHERE last_snapshot_id IS NOT NULL)`
+  ).run('2000-01-01T00:00:00.000Z');
   const dropped = gc(db, { retainDays: 0 });
   assert.ok(dropped >= 1, `expected drops, got ${dropped}`);
 

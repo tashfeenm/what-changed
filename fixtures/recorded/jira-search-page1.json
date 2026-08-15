@@ -1,0 +1,179 @@
+{
+  "issues": [
+    {
+      "id": "10001",
+      "key": "PAY-101",
+      "self": "https://acme.atlassian.net/rest/api/3/issue/10001",
+      "fields": {
+        "summary": "Make checkout capture idempotent",
+        "status": {
+          "self": "https://acme.atlassian.net/rest/api/3/status/3",
+          "description": "Work is actively being implemented.",
+          "iconUrl": "https://acme.atlassian.net/images/icons/statuses/inprogress.png",
+          "name": "In Progress",
+          "id": "3",
+          "statusCategory": {
+            "id": 4,
+            "key": "indeterminate",
+            "colorName": "yellow",
+            "name": "In Progress"
+          }
+        },
+        "assignee": {
+          "self": "https://acme.atlassian.net/rest/api/3/user?accountId=acct-viewer",
+          "accountId": "acct-viewer",
+          "emailAddress": "viewer@example.test",
+          "displayName": "Octo Viewer",
+          "active": true,
+          "timeZone": "America/Vancouver",
+          "accountType": "atlassian"
+        },
+        "priority": {
+          "self": "https://acme.atlassian.net/rest/api/3/priority/2",
+          "iconUrl": "https://acme.atlassian.net/images/icons/priorities/high.svg",
+          "name": "High",
+          "id": "2"
+        },
+        "labels": [
+          "payments",
+          "backend",
+          "checkout"
+        ],
+        "description": {
+          "version": 1,
+          "type": "doc",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Attach an idempotency key to every capture request."
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Keep the key for 24 hours."
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        "comment": {
+          "startAt": 0,
+          "maxResults": 1,
+          "total": 2,
+          "comments": [
+            {
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10001/comment/9001",
+              "id": "9001",
+              "author": {
+                "self": "https://acme.atlassian.net/rest/api/3/user?accountId=acct-reviewer",
+                "accountId": "acct-reviewer",
+                "displayName": "Mira Reviewer",
+                "active": true,
+                "timeZone": "America/Vancouver",
+                "accountType": "atlassian"
+              },
+              "body": {
+                "version": 1,
+                "type": "doc",
+                "content": [
+                  {
+                    "type": "paragraph",
+                    "content": [
+                      {
+                        "type": "text",
+                        "text": "Verified the retry path against staging and added the dashboard link."
+                      }
+                    ]
+                  }
+                ]
+              },
+              "updateAuthor": {
+                "self": "https://acme.atlassian.net/rest/api/3/user?accountId=acct-reviewer",
+                "accountId": "acct-reviewer",
+                "displayName": "Mira Reviewer",
+                "active": true,
+                "timeZone": "America/Vancouver",
+                "accountType": "atlassian"
+              },
+              "created": "2026-08-12T15:30:00.000-0700",
+              "updated": "2026-08-12T15:34:00.000-0700",
+              "jsdPublic": true
+            }
+          ]
+        },
+        "issuelinks": [
+          {
+            "id": "10002",
+            "self": "https://acme.atlassian.net/rest/api/3/issueLink/10002",
+            "type": {
+              "id": "10000",
+              "name": "Blocks",
+              "inward": "is blocked by",
+              "outward": "blocks",
+              "self": "https://acme.atlassian.net/rest/api/3/issueLinkType/10000"
+            },
+            "inwardIssue": {
+              "id": "10042",
+              "key": "PAY-42",
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10042",
+              "fields": {
+                "summary": "Provision the payment idempotency store",
+                "status": {
+                  "name": "In Progress"
+                },
+                "priority": {
+                  "name": "Highest"
+                }
+              }
+            }
+          },
+          {
+            "id": "10001",
+            "self": "https://acme.atlassian.net/rest/api/3/issueLink/10001",
+            "type": {
+              "id": "10000",
+              "name": "Blocks",
+              "inward": "is blocked by",
+              "outward": "blocks",
+              "self": "https://acme.atlassian.net/rest/api/3/issueLinkType/10000"
+            },
+            "outwardIssue": {
+              "id": "10118",
+              "key": "PAY-118",
+              "self": "https://acme.atlassian.net/rest/api/3/issue/10118",
+              "fields": {
+                "summary": "Expose capture retry telemetry",
+                "status": {
+                  "name": "To Do"
+                },
+                "priority": {
+                  "name": "Medium"
+                }
+              }
+            }
+          }
+        ],
+        "updated": "2026-08-12T15:34:00.000-0700"
+      }
+    }
+  ],
+  "nextPageToken": "recorded-page-2-token",
+  "isLast": false
+}
